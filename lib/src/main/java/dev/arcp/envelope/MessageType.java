@@ -1,22 +1,21 @@
 package dev.arcp.envelope;
 
-import dev.arcp.messages.control.Ping;
-import dev.arcp.messages.control.Pong;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Sealed root of every ARCP payload variant (RFC §6.2).
- *
- * <p>
- * Concrete variants register themselves with {@link #register(String, Class)};
+ * Root of every ARCP payload variant (RFC §6.2). Concrete records implement
+ * this interface and register themselves with {@link #register(String, Class)};
  * {@link Envelope} uses the registry during JSON deserialization to map the
  * envelope-level {@code type} discriminator to the right record class.
- * {@code switch} expressions over {@code MessageType} are compile-time
- * exhaustive — the registry exists only for the wire-format mapping, not for
- * dispatch.
+ *
+ * <p>
+ * {@code MessageType} is intentionally non-sealed so new variants can be added
+ * by downstream modules without modifying this file. Compile-time
+ * exhaustiveness is preserved on a per-handler basis via sealed sub-interfaces
+ * (e.g. session messages, job messages).
  */
-public sealed interface MessageType permits Ping, Pong {
+public interface MessageType {
 
 	/** @return the wire-format discriminator (e.g. {@code "ping"}). */
 	String type();
@@ -24,11 +23,6 @@ public sealed interface MessageType permits Ping, Pong {
 	/** Mutable mapping from wire type string to the concrete record class. */
 	final class Registry {
 		private static final Map<String, Class<? extends MessageType>> MAP = new ConcurrentHashMap<>();
-
-		static {
-			MAP.put("ping", Ping.class);
-			MAP.put("pong", Pong.class);
-		}
 
 		private Registry() {
 		}
@@ -51,8 +45,8 @@ public sealed interface MessageType permits Ping, Pong {
 	}
 
 	/**
-	 * Register a wire-format type string for a concrete variant. Idempotent. Used
-	 * by additional message-type modules added in later phases.
+	 * Register a wire-format type string for a concrete variant. Idempotent.
+	 * Built-in message families call this in their class initializer.
 	 */
 	static void register(String type, Class<? extends MessageType> cls) {
 		Registry.put(type, cls);
