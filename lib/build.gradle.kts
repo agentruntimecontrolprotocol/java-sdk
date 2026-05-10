@@ -46,6 +46,8 @@ tasks.withType<JavaCompile>().configureEach {
             "-Werror",
             "-Xlint:all",
             "-Xlint:-processing",
+            // ulid-creator is an automatic module (no module descriptor).
+            "-Xlint:-requires-automatic",
             "-parameters",
         ),
     )
@@ -53,6 +55,9 @@ tasks.withType<JavaCompile>().configureEach {
         disableWarningsInGeneratedCode.set(true)
         option("NullAway:AnnotatedPackages", "dev.arcp")
         error("NullAway")
+        // `@return ...` is an idiomatic Javadoc summary; the Google style
+        // checker disagrees but we accept it.
+        disable("MissingSummary")
     }
 }
 
@@ -89,7 +94,8 @@ spotless {
 }
 
 jacoco {
-    toolVersion = "0.8.12"
+    // JaCoCo 0.8.13+ adds support for Java 25 class major version 69.
+    toolVersion = "0.8.13"
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {
