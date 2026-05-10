@@ -78,4 +78,4 @@ End-to-end examples (`:examples:run01` … `:run06`) ship in Phase 7.
 
 ## License
 
-MIT.
+Apache License 2.0 — see [`LICENSE`](LICENSE).
