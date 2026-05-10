@@ -2,12 +2,18 @@
 .gradle/
 build/
 **/build/
+bin/
+**/bin/
 !gradle/wrapper/gradle-wrapper.jar
 
 # IDE
 .idea/
 *.iml
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
 *.iws
 *.ipr
 .classpath
