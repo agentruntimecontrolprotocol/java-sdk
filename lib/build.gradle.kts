@@ -51,7 +51,7 @@ tasks.withType<JavaCompile>().configureEach {
     )
     options.errorprone {
         disableWarningsInGeneratedCode.set(true)
-        option("NullAway:AnnotatedPackages", "dev.fizzpop.arcp")
+        option("NullAway:AnnotatedPackages", "dev.arcp")
         error("NullAway")
     }
 }

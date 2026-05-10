@@ -1,6 +1,6 @@
-package dev.fizzpop.arcp.cli;
+package dev.arcp.cli;
 
-import dev.fizzpop.arcp.Version;
+import dev.arcp.Version;
 
 /**
  * Command-line entrypoint. Phase 0 stub; Phase 7 fills in

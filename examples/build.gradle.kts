@@ -22,7 +22,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("dev.fizzpop.arcp.examples.Example01MinimalSession")
+    mainClass.set("dev.arcp.examples.Example01MinimalSession")
 }
 
 // Phase 7 will register one task per example via JavaExec; v0.1 examples are
@@ -41,7 +41,7 @@ tasks.withType<JavaCompile>().configureEach {
     )
     options.errorprone {
         disableWarningsInGeneratedCode.set(true)
-        option("NullAway:AnnotatedPackages", "dev.fizzpop.arcp")
+        option("NullAway:AnnotatedPackages", "dev.arcp")
         error("NullAway")
     }
 }

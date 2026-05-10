@@ -1,4 +1,4 @@
-package dev.fizzpop.arcp;
+package dev.arcp;
 
 /**
  * Library identity. Populated at build time via the project version (see

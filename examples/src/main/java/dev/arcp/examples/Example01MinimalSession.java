@@ -1,6 +1,6 @@
-package dev.fizzpop.arcp.examples;
+package dev.arcp.examples;
 
-import dev.fizzpop.arcp.Version;
+import dev.arcp.Version;
 
 /**
  * Example 01 — minimal session. Phase 0 stub; Phase 2 wires up the actual

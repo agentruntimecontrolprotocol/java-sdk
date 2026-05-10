@@ -6,4 +6,4 @@
  * See {@code RFC-0001-v2.md} for the canonical protocol specification and
  * {@code PLAN.md} for the implementation plan.
  */
-package dev.fizzpop.arcp;
+package dev.arcp;

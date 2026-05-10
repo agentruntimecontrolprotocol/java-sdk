@@ -23,7 +23,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("dev.fizzpop.arcp.cli.ArcpCli")
+    mainClass.set("dev.arcp.cli.ArcpCli")
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -39,7 +39,7 @@ tasks.withType<JavaCompile>().configureEach {
     )
     options.errorprone {
         disableWarningsInGeneratedCode.set(true)
-        option("NullAway:AnnotatedPackages", "dev.fizzpop.arcp")
+        option("NullAway:AnnotatedPackages", "dev.arcp")
         error("NullAway")
     }
 }

@@ -4,7 +4,7 @@ plugins {
 }
 
 allprojects {
-    group = "dev.fizzpop"
+    group = "dev.arcp"
     version = "0.1.0-SNAPSHOT"
 
     repositories {
