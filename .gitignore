@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+
+# JVM
+hs_err_pid*.log
+replay_pid*.log

@@ -1,0 +1,55 @@
+import net.ltgt.gradle.errorprone.errorprone
+
+plugins {
+    application
+    alias(libs.plugins.spotless)
+    alias(libs.plugins.errorprone)
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+
+dependencies {
+    implementation(project(":lib"))
+    implementation(libs.picocli)
+    implementation(libs.slf4j.api)
+    runtimeOnly(libs.slf4j.simple)
+
+    errorprone(libs.errorprone.core)
+    errorprone(libs.nullaway)
+}
+
+application {
+    mainClass.set("dev.fizzpop.arcp.cli.ArcpCli")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(25)
+    options.encoding = "UTF-8"
+    options.compilerArgs.addAll(
+        listOf(
+            "-Werror",
+            "-Xlint:all",
+            "-Xlint:-processing",
+            "-parameters",
+        ),
+    )
+    options.errorprone {
+        disableWarningsInGeneratedCode.set(true)
+        option("NullAway:AnnotatedPackages", "dev.fizzpop.arcp")
+        error("NullAway")
+    }
+}
+
+spotless {
+    java {
+        target("src/**/*.java")
+        eclipse()
+        removeUnusedImports()
+        endWithNewline()
+        trimTrailingWhitespace()
+    }
+}
