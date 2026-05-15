@@ -5,11 +5,11 @@ import dev.arcp.core.capabilities.AgentDescriptor;
 import dev.arcp.core.error.AgentNotAvailableException;
 import dev.arcp.core.error.AgentVersionNotAvailableException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+
 
 /** Holds registered agent versions and resolves {@link AgentRef} per §7.5. */
 public final class AgentRegistry {
@@ -38,36 +38,31 @@ public final class AgentRegistry {
         }
         if (ref.version() == null) {
             String chosen = defaults.get(ref.name());
-            for (Entry e : versions) {
-                if (e.version.equals(chosen)) {
-                    return new Resolved(ref.name(), e.version, e.agent);
-                }
-            }
-            Entry fallback = versions.get(0);
-            return new Resolved(ref.name(), fallback.version, fallback.agent);
+            return versions.stream()
+                    .filter(e -> e.version.equals(chosen))
+                    .findFirst()
+                    .map(e -> new Resolved(ref.name(), e.version, e.agent))
+                    .orElseGet(() -> {
+                        Entry fallback = versions.get(0);
+                        return new Resolved(ref.name(), fallback.version, fallback.agent);
+                    });
         }
-        for (Entry e : versions) {
-            if (e.version.equals(ref.version())) {
-                return new Resolved(ref.name(), e.version, e.agent);
-            }
-        }
-        throw new AgentVersionNotAvailableException(
-                ref.name() + "@" + ref.version() + " not registered");
+        Entry match = versions.stream()
+                .filter(e -> e.version.equals(ref.version()))
+                .findFirst()
+                .orElseThrow(() -> new AgentVersionNotAvailableException(
+                        ref.name() + "@" + ref.version() + " not registered"));
+        return new Resolved(ref.name(), match.version, match.agent);
     }
 
     public synchronized List<AgentDescriptor> describe() {
         // Sorted for stable wire output.
-        Map<String, List<Entry>> sorted = new TreeMap<>(byName);
-        List<AgentDescriptor> out = new ArrayList<>(sorted.size());
-        for (var entry : sorted.entrySet()) {
-            List<String> versions = new ArrayList<>(entry.getValue().size());
-            for (Entry e : entry.getValue()) {
-                versions.add(e.version);
-            }
-            Collections.sort(versions);
-            out.add(new AgentDescriptor(entry.getKey(), versions, defaults.get(entry.getKey())));
-        }
-        return out;
+        return new TreeMap<>(byName).entrySet().stream()
+                .map(entry -> new AgentDescriptor(
+                        entry.getKey(),
+                        entry.getValue().stream().map(Entry::version).sorted().toList(),
+                        defaults.get(entry.getKey())))
+                .toList();
     }
 
     public record Resolved(String name, String version, Agent agent) {

@@ -39,13 +39,10 @@ public final class LeaseGuard {
                     "lease expired at " + constraints.expiresAt() + " for " + namespace);
         }
         List<String> patterns = lease.patterns(namespace);
-        for (String allowed : patterns) {
-            if (matches(allowed, pattern)) {
-                return;
-            }
+        if (patterns.stream().noneMatch(allowed -> matches(allowed, pattern))) {
+            throw new PermissionDeniedException(
+                    namespace + " does not permit " + pattern + "; allowed=" + patterns);
         }
-        throw new PermissionDeniedException(
-                namespace + " does not permit " + pattern + "; allowed=" + patterns);
     }
 
     static boolean matches(String pattern, String value) {

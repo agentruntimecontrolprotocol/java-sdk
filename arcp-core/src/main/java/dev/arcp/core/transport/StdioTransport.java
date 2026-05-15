@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +46,7 @@ public final class StdioTransport implements Transport {
 
     private final ObjectMapper mapper;
     private final BufferedWriter writer;
+    private final ReentrantLock writeLock = new ReentrantLock();
     private final BufferedReader reader;
     private final SubmissionPublisher<Envelope> inbound;
     private final Thread readerThread;
@@ -99,14 +101,16 @@ public final class StdioTransport implements Transport {
         if (closed) {
             throw new IllegalStateException("transport closed");
         }
+        // Lock held across blocking I/O to keep one envelope's bytes contiguous.
+        writeLock.lock();
         try {
-            synchronized (writer) {
-                writer.write(mapper.writeValueAsString(envelope));
-                writer.write('\n');
-                writer.flush();
-            }
+            writer.write(mapper.writeValueAsString(envelope));
+            writer.write('\n');
+            writer.flush();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        } finally {
+            writeLock.unlock();
         }
     }
 

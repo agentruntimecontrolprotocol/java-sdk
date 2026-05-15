@@ -133,7 +133,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
         heartbeat.onInbound();
         try {
             handle(envelope);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("dispatch error for {}: {}", envelope.type(), e.toString());
         }
     }
@@ -314,31 +314,24 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             return;
         }
         JobFilter filter = req.filter() != null ? req.filter() : JobFilter.all();
-        List<JobSummary> matching = new ArrayList<>();
-        for (JobRecord rec : jobs.values()) {
-            if (!rec.principal().equals(principal)) {
-                continue;
-            }
-            if (filter.status() != null && !filter.status().contains(rec.status().wire())) {
-                continue;
-            }
-            if (filter.agent() != null && !filter.agent().equals(rec.resolvedAgent())
-                    && !filter.agent().equals(rec.resolvedAgent().split("@", 2)[0])) {
-                continue;
-            }
-            if (filter.createdAfter() != null && !rec.createdAt().isAfter(filter.createdAfter())) {
-                continue;
-            }
-            matching.add(new JobSummary(
-                    rec.jobId(),
-                    rec.resolvedAgent(),
-                    rec.status().wire(),
-                    rec.lease(),
-                    null,
-                    rec.createdAt(),
-                    rec.traceId(),
-                    rec.lastEventSeq()));
-        }
+        List<JobSummary> matching = jobs.values().stream()
+                .filter(rec -> rec.principal().equals(principal))
+                .filter(rec -> filter.status() == null || filter.status().contains(rec.status().wire()))
+                .filter(rec -> filter.agent() == null
+                        || filter.agent().equals(rec.resolvedAgent())
+                        || filter.agent().equals(rec.resolvedAgent().split("@", 2)[0]))
+                .filter(rec -> filter.createdAfter() == null
+                        || rec.createdAt().isAfter(filter.createdAfter()))
+                .map(rec -> new JobSummary(
+                        rec.jobId(),
+                        rec.resolvedAgent(),
+                        rec.status().wire(),
+                        rec.lease(),
+                        null,
+                        rec.createdAt(),
+                        rec.traceId(),
+                        rec.lastEventSeq()))
+                .toList();
         SessionJobs response = new SessionJobs(requestId, matching, null);
         send(Message.Type.SESSION_JOBS, response, sessionId, null, null, null);
     }

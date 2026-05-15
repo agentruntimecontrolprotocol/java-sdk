@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jspecify.annotations.Nullable;
 
 /**
  * §7.2 idempotency: a {@code (principal, idempotency_key)} pair maps to a
@@ -40,7 +41,7 @@ public final class IdempotencyStore {
      *       {@code DUPLICATE_KEY}).</li>
      * </ul>
      */
-    public Conflict claim(Principal principal, String idempotencyKey, int payloadHash, JobId freshId) {
+    public @Nullable Conflict claim(Principal principal, String idempotencyKey, int payloadHash, JobId freshId) {
         prune();
         Key key = new Key(principal.id(), idempotencyKey);
         Entry existing = entries.compute(key, (k, prior) -> {

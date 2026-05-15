@@ -7,11 +7,12 @@ import dev.arcp.client.ArcpClient;
  * responsible for spinning up a runtime against which an {@link ArcpClient}
  * is connected; the harness owns the client lifecycle.
  */
-public interface TckProvider {
+public interface TckProvider extends AutoCloseable {
 
     /** Construct and connect a fresh {@link ArcpClient} for one assertion. */
     ArcpClient connect() throws Exception;
 
     /** Tear down any per-test runtime resources. */
+    @Override
     default void close() throws Exception {}
 }

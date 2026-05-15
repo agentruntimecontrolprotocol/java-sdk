@@ -2,6 +2,7 @@ package dev.arcp.core.capabilities;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import java.util.Arrays;
 import java.util.Optional;
 
 public enum Feature {
@@ -28,11 +29,8 @@ public enum Feature {
 
     @JsonCreator
     public static Optional<Feature> fromWire(String wire) {
-        for (Feature f : values()) {
-            if (f.wire.equals(wire)) {
-                return Optional.of(f);
-            }
-        }
-        return Optional.empty();
+        return Arrays.stream(values())
+                .filter(f -> f.wire.equals(wire))
+                .findFirst();
     }
 }

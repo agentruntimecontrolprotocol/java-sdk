@@ -2,6 +2,7 @@ package dev.arcp.core.error;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import java.util.Arrays;
 
 public enum ErrorCode {
     PERMISSION_DENIED(false),
@@ -37,11 +38,9 @@ public enum ErrorCode {
 
     @JsonCreator
     public static ErrorCode fromWire(String wire) {
-        for (ErrorCode c : values()) {
-            if (c.name().equals(wire)) {
-                return c;
-            }
-        }
-        return INTERNAL_ERROR;
+        return Arrays.stream(values())
+                .filter(c -> c.name().equals(wire))
+                .findFirst()
+                .orElse(INTERNAL_ERROR);
     }
 }

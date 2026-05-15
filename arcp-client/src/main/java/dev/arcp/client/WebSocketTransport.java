@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
 import java.util.concurrent.TimeUnit;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +64,7 @@ public final class WebSocketTransport implements Transport {
             }
 
             @Override
-            public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+            public @Nullable CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                 WebSocketTransport t = futureSocket.get();
                 if (t != null) {
                     t.handleText(data, last);
@@ -73,7 +74,7 @@ public final class WebSocketTransport implements Transport {
             }
 
             @Override
-            public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+            public @Nullable CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
                 WebSocketTransport t = futureSocket.get();
                 if (t != null) {
                     t.inbound.close();
@@ -146,7 +147,8 @@ public final class WebSocketTransport implements Transport {
             socket.sendClose(WebSocket.NORMAL_CLOSURE, "bye").get(2, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (Exception ignored) {
+        } catch (java.util.concurrent.ExecutionException
+                | java.util.concurrent.TimeoutException ignored) {
             // best-effort close
         }
         inbound.close();

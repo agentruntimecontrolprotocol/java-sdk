@@ -3,12 +3,11 @@ package dev.arcp.core.capabilities;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -35,12 +34,11 @@ public record Capabilities(
             @JsonProperty("encodings") @Nullable List<String> encodings,
             @JsonProperty("features") @Nullable List<String> features,
             @JsonProperty("agents") @Nullable List<AgentDescriptor> agents) {
-        Set<Feature> parsed = EnumSet.noneOf(Feature.class);
-        if (features != null) {
-            for (String w : features) {
-                Feature.fromWire(w).ifPresent(parsed::add);
-            }
-        }
+        Set<Feature> parsed = features == null
+                ? EnumSet.noneOf(Feature.class)
+                : features.stream()
+                        .flatMap(w -> Feature.fromWire(w).stream())
+                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(Feature.class)));
         return new Capabilities(
                 encodings == null ? List.of("json") : encodings, parsed, agents);
     }
@@ -48,12 +46,7 @@ public record Capabilities(
     @JsonProperty("features")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     public List<String> featuresWire() {
-        List<String> out = new ArrayList<>(features.size());
-        for (Feature f : features) {
-            out.add(f.wire());
-        }
-        Collections.sort(out);
-        return out;
+        return features.stream().map(Feature::wire).sorted().toList();
     }
 
     public static Set<Feature> intersect(Set<Feature> a, Set<Feature> b) {

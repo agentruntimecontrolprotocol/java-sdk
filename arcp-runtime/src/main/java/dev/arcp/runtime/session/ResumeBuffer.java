@@ -2,7 +2,6 @@ package dev.arcp.runtime.session;
 
 import dev.arcp.core.wire.Envelope;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
@@ -36,22 +35,16 @@ public final class ResumeBuffer {
     }
 
     public synchronized List<Envelope> since(long lastEventSeq) {
-        List<Envelope> out = new ArrayList<>();
-        for (Envelope e : ring) {
-            Long seq = e.eventSeq();
-            if (seq != null && seq > lastEventSeq) {
-                out.add(e);
-            }
-        }
-        return out;
+        return ring.stream()
+                .filter(e -> e.eventSeq() != null && e.eventSeq() > lastEventSeq)
+                .toList();
     }
 
     public synchronized long earliestSeq() {
-        for (Envelope e : ring) {
-            if (e.eventSeq() != null) {
-                return e.eventSeq();
-            }
-        }
-        return -1;
+        return ring.stream()
+                .map(Envelope::eventSeq)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(-1L);
     }
 }

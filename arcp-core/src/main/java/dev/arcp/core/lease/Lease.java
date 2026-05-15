@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Capability bag: namespace → list of pattern strings.
@@ -24,11 +25,12 @@ public final class Lease {
 
     public Lease(Map<String, List<String>> capabilities) {
         Objects.requireNonNull(capabilities, "capabilities");
-        Map<String, List<String>> copy = new LinkedHashMap<>();
-        for (var e : capabilities.entrySet()) {
-            copy.put(e.getKey(), List.copyOf(e.getValue()));
-        }
-        this.capabilities = Collections.unmodifiableMap(copy);
+        this.capabilities = Collections.unmodifiableMap(capabilities.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> List.copyOf(e.getValue()),
+                        (a, b) -> a,
+                        LinkedHashMap::new)));
     }
 
     public static Lease empty() {
@@ -46,17 +48,21 @@ public final class Lease {
 
     /** Parsed cost.budget initial amounts per currency. */
     public Map<String, BigDecimal> budget() {
-        Map<String, BigDecimal> out = new LinkedHashMap<>();
-        for (String entry : patterns("cost.budget")) {
-            int colon = entry.indexOf(':');
-            if (colon <= 0 || colon == entry.length() - 1) {
-                throw new IllegalArgumentException("invalid cost.budget pattern: " + entry);
-            }
-            String currency = entry.substring(0, colon);
-            BigDecimal amount = new BigDecimal(entry.substring(colon + 1));
-            out.merge(currency, amount, BigDecimal::add);
-        }
-        return out;
+        return patterns("cost.budget").stream()
+                .map(entry -> {
+                    int colon = entry.indexOf(':');
+                    if (colon <= 0 || colon == entry.length() - 1) {
+                        throw new IllegalArgumentException("invalid cost.budget pattern: " + entry);
+                    }
+                    return Map.entry(
+                            entry.substring(0, colon),
+                            new BigDecimal(entry.substring(colon + 1)));
+                })
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        BigDecimal::add,
+                        LinkedHashMap::new));
     }
 
     @JsonCreator
@@ -66,18 +72,10 @@ public final class Lease {
 
     /** §9.4 subset check: every key/pattern in {@code child} appears in {@code this}. */
     public boolean contains(Lease child) {
-        for (var e : child.capabilities.entrySet()) {
+        return child.capabilities.entrySet().stream().allMatch(e -> {
             List<String> parent = capabilities.get(e.getKey());
-            if (parent == null) {
-                return false;
-            }
-            for (String pat : e.getValue()) {
-                if (!parent.contains(pat)) {
-                    return false;
-                }
-            }
-        }
-        return true;
+            return parent != null && parent.containsAll(e.getValue());
+        });
     }
 
     public static final class Builder {

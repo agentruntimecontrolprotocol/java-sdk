@@ -7,6 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Multicast {@link Flow.Publisher} that buffers every emission and replays the
@@ -18,6 +19,7 @@ final class ReplayingPublisher<T> implements Flow.Publisher<T> {
 
     private final List<T> buffer = new CopyOnWriteArrayList<>();
     private final SubmissionPublisher<T> live;
+    private final ReentrantLock lock = new ReentrantLock();
     private volatile boolean closed;
 
     ReplayingPublisher() {
@@ -25,17 +27,29 @@ final class ReplayingPublisher<T> implements Flow.Publisher<T> {
                 Executors.newVirtualThreadPerTaskExecutor(), 1024);
     }
 
-    synchronized void submit(T item) {
-        buffer.add(item);
-        live.submit(item);
+    // Lock spans live.submit so concurrent producers preserve buffer/live order;
+    // back-pressure blocking on a full submission queue therefore stalls peers.
+    void submit(T item) {
+        lock.lock();
+        try {
+            buffer.add(item);
+            live.submit(item);
+        } finally {
+            lock.unlock();
+        }
     }
 
-    synchronized void close() {
-        if (closed) {
-            return;
+    void close() {
+        lock.lock();
+        try {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            live.close();
+        } finally {
+            lock.unlock();
         }
-        closed = true;
-        live.close();
     }
 
     @Override
@@ -46,7 +60,8 @@ final class ReplayingPublisher<T> implements Flow.Publisher<T> {
 
         // Hold the publisher lock while snapshotting AND attaching to live so
         // no submit() can interleave between the two and produce a gap.
-        synchronized (this) {
+        lock.lock();
+        try {
             snapshot = new ArrayList<>(buffer);
             wasClosed = closed;
             if (!wasClosed) {
@@ -78,6 +93,8 @@ final class ReplayingPublisher<T> implements Flow.Publisher<T> {
                     }
                 });
             }
+        } finally {
+            lock.unlock();
         }
 
         downstream.onSubscribe(new Flow.Subscription() {

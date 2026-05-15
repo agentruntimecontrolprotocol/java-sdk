@@ -84,9 +84,9 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     private final Duration ackInterval;
     private final AtomicLong lastSeenSeq = new AtomicLong(-1);
     private final AtomicLong lastAckedSeq = new AtomicLong(-1);
+    private final AtomicLong lastInboundMillis = new AtomicLong(System.currentTimeMillis());
     private @Nullable ScheduledFuture<?> ackTick;
     private @Nullable ScheduledFuture<?> heartbeatWatchdog;
-    private volatile long lastInboundMillis = System.currentTimeMillis();
     private final ConcurrentHashMap<JobId, SubmissionPublisher<EventBody>> liveSubscribers =
             new ConcurrentHashMap<>();
     @SuppressWarnings("unused")
@@ -212,14 +212,14 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
 
     @Override
     public void onNext(Envelope envelope) {
-        lastInboundMillis = System.currentTimeMillis();
+        lastInboundMillis.set(System.currentTimeMillis());
         Long seq = envelope.eventSeq();
         if (seq != null) {
             lastSeenSeq.updateAndGet(prev -> Math.max(prev, seq));
         }
         try {
             dispatch(envelope);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("client dispatch error for {}: {}", envelope.type(), e.toString());
         }
     }
@@ -256,7 +256,15 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
             case JobSubscribed ignored -> { /* signal */ }
             case SessionJobs jobs -> handleListResponse(jobs);
             case SessionPing ping -> handlePing(ping);
-            default -> log.debug("client ignored: {}", envelope.type());
+            case SessionPong ignored -> log.debug("client ignored: {}", envelope.type());
+            case SessionAck ignored -> log.debug("client ignored: {}", envelope.type());
+            case SessionHello ignored -> log.debug("client ignored: {}", envelope.type());
+            case SessionBye ignored -> log.debug("client ignored: {}", envelope.type());
+            case SessionListJobs ignored -> log.debug("client ignored: {}", envelope.type());
+            case JobSubmit ignored -> log.debug("client ignored: {}", envelope.type());
+            case JobCancel ignored -> log.debug("client ignored: {}", envelope.type());
+            case JobSubscribe ignored -> log.debug("client ignored: {}", envelope.type());
+            case JobUnsubscribe ignored -> log.debug("client ignored: {}", envelope.type());
         }
     }
 
@@ -305,7 +313,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     }
 
     private void watchHeartbeat(long intervalMs) {
-        long elapsed = System.currentTimeMillis() - lastInboundMillis;
+        long elapsed = System.currentTimeMillis() - lastInboundMillis.get();
         if (elapsed > intervalMs * 2) {
             log.info("client observed heartbeat loss; closing session");
             close();
@@ -319,11 +327,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
         // We associate by traversing pending submits in insertion order; the
         // runtime guarantees ordering per-session, so the oldest pending submit
         // is the one being acknowledged.
-        MessageId match = null;
-        for (var entry : pendingSubmits.entrySet()) {
-            match = entry.getKey();
-            break;
-        }
+        MessageId match = pendingSubmits.keySet().stream().findFirst().orElse(null);
         if (match == null) {
             return;
         }
@@ -370,11 +374,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
         Outstanding o = jid != null ? outstanding.remove(jid) : null;
         if (o == null) {
             // Top-level (unassigned) error: drop the oldest pending submit.
-            MessageId first = null;
-            for (var k : pendingSubmits.keySet()) {
-                first = k;
-                break;
-            }
+            MessageId first = pendingSubmits.keySet().stream().findFirst().orElse(null);
             if (first != null) {
                 Outstanding pending = pendingSubmits.remove(first);
                 if (pending != null) {

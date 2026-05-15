@@ -56,12 +56,10 @@ public sealed interface Message
         }
 
         public static Type fromWire(String wire) {
-            for (Type t : values()) {
-                if (t.wire.equals(wire)) {
-                    return t;
-                }
-            }
-            throw new IllegalArgumentException("unknown message type: " + wire);
+            return java.util.Arrays.stream(values())
+                    .filter(t -> t.wire.equals(wire))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("unknown message type: " + wire));
         }
     }
 }

@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 /**
  * §9.6 per-currency budget counters. Reads are cheap; mutations are
@@ -34,11 +35,12 @@ public final class BudgetCounters {
     }
 
     public Map<String, BigDecimal> snapshot() {
-        Map<String, BigDecimal> out = new LinkedHashMap<>();
-        for (var e : counters.entrySet()) {
-            out.put(e.getKey(), e.getValue().get());
-        }
-        return Collections.unmodifiableMap(out);
+        return Collections.unmodifiableMap(counters.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> e.getValue().get(),
+                        (a, b) -> a,
+                        LinkedHashMap::new)));
     }
 
     /** §9.6: negative metric values produce no decrement. */

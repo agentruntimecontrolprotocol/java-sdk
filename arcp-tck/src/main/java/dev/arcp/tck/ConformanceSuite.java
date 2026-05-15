@@ -67,11 +67,9 @@ public final class ConformanceSuite {
     }
 
     private static void runWith(ProviderFactory factory, Assertion assertion) throws Exception {
-        TckProvider provider = factory.create();
-        try (ArcpClient client = provider.connect()) {
+        try (TckProvider provider = factory.create();
+                ArcpClient client = provider.connect()) {
             assertion.run(provider, client);
-        } finally {
-            provider.close();
         }
     }
 

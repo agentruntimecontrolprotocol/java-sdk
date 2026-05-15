@@ -42,12 +42,10 @@ public sealed interface EventBody
         }
 
         public static Kind fromWire(String wire) {
-            for (Kind k : values()) {
-                if (k.wire.equals(wire)) {
-                    return k;
-                }
-            }
-            throw new IllegalArgumentException("unknown event kind: " + wire);
+            return java.util.Arrays.stream(values())
+                    .filter(k -> k.wire.equals(wire))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("unknown event kind: " + wire));
         }
     }
 }
