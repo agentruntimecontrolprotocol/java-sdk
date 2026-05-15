@@ -1,47 +1,54 @@
 [versions]
 jackson = "2.18.2"
-sqlite = "3.50.1.0"
-java-websocket = "1.6.0"
-nimbus-jwt = "9.40"
 slf4j = "2.0.16"
 jspecify = "1.0.0"
-picocli = "4.7.6"
 ulid = "5.2.3"
-json-schema-validator = "1.5.1"
 
 junit = "5.11.4"
 assertj = "3.26.3"
 awaitility = "4.2.2"
-mockito = "5.14.2"
 
-spotless = "7.0.4"
-errorprone-plugin = "4.1.0"
-errorprone-core = "2.36.0"
-nullaway = "0.12.1"
-palantir-fmt = "2.68.0"
+opentelemetry = "1.44.1"
+jetty = "12.0.16"
+spring-boot = "3.4.1"
+spring = "6.2.1"
+jakarta-websocket = "2.2.0"
+vertx = "5.0.0"
 
 [libraries]
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 jackson-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
-sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
-java-websocket = { module = "org.java-websocket:Java-WebSocket", version.ref = "java-websocket" }
-nimbus-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jwt" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
-picocli = { module = "info.picocli:picocli", version.ref = "picocli" }
 ulid = { module = "com.github.f4b6a3:ulid-creator", version.ref = "ulid" }
-json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "json-schema-validator" }
 
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 assertj = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 awaitility = { module = "org.awaitility:awaitility", version.ref = "awaitility" }
-mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 
-errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone-core" }
-nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
+opentelemetry-api = { module = "io.opentelemetry:opentelemetry-api", version.ref = "opentelemetry" }
+opentelemetry-context = { module = "io.opentelemetry:opentelemetry-context", version.ref = "opentelemetry" }
+opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry" }
+opentelemetry-sdk-testing = { module = "io.opentelemetry:opentelemetry-sdk-testing", version.ref = "opentelemetry" }
 
-[plugins]
-spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
-errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
+jetty-server = { module = "org.eclipse.jetty:jetty-server", version.ref = "jetty" }
+jetty-ee10-servlet = { module = "org.eclipse.jetty.ee10:jetty-ee10-servlet", version.ref = "jetty" }
+jetty-ee10-websocket-jakarta-server = { module = "org.eclipse.jetty.ee10.websocket:jetty-ee10-websocket-jakarta-server", version.ref = "jetty" }
+
+spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter", version.ref = "spring-boot" }
+spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web", version.ref = "spring-boot" }
+spring-boot-starter-websocket = { module = "org.springframework.boot:spring-boot-starter-websocket", version.ref = "spring-boot" }
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
+spring-boot-test = { module = "org.springframework.boot:spring-boot-starter-test", version.ref = "spring-boot" }
+spring-websocket = { module = "org.springframework:spring-websocket", version.ref = "spring" }
+spring-messaging = { module = "org.springframework:spring-messaging", version.ref = "spring" }
+spring-web = { module = "org.springframework:spring-web", version.ref = "spring" }
+spring-context = { module = "org.springframework:spring-context", version.ref = "spring" }
+
+jakarta-websocket-api = { module = "jakarta.websocket:jakarta.websocket-api", version.ref = "jakarta-websocket" }
+jakarta-websocket-client-api = { module = "jakarta.websocket:jakarta.websocket-client-api", version.ref = "jakarta-websocket" }
+
+vertx-core = { module = "io.vertx:vertx-core", version.ref = "vertx" }
+vertx-web = { module = "io.vertx:vertx-web", version.ref = "vertx" }

@@ -1,0 +1,93 @@
+// Module graph for the ARCP Java SDK (dark variant). Structurally identical
+// to module-graph-light.dot; only color hex codes differ.
+
+digraph ModuleGraph {
+  rankdir=LR;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.34;
+  ranksep=0.62;
+  pad="0.35,0.25";
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#334155",
+    color="#475569",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#F1F5F9",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#94A3B8",
+    color="#64748B",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  Consumer [
+    label=<<FONT POINT-SIZE="12"><B>Consumer app</B></FONT>>,
+    fillcolor="#3B82F6", color="#2563EB",
+    fontcolor="white", penwidth=1.4
+  ];
+
+  subgraph cluster_published {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Published artifacts</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#0F172A";
+    color="#334155";
+    fontname="Helvetica";
+    fontcolor="#94A3B8";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    Umbrella [
+      label=<<FONT POINT-SIZE="12"><B>arcp</B></FONT>>,
+      fillcolor="#F59E0B", color="#D97706",
+      fontcolor="white", penwidth=1.4
+    ];
+
+    subgraph cluster_core {
+      label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>Core trio</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+      style="rounded,filled";
+      fillcolor="#1E293B";
+      color="#334155";
+      fontname="Helvetica";
+      fontcolor="#94A3B8";
+      margin=12;
+      labeljust=l;
+      penwidth=1.0;
+
+      Client [label="arcp-client"];
+      Runtime [label="arcp-runtime"];
+      Core [label="arcp-core"];
+      { rank=same; Client; Runtime; }
+    }
+
+    Jetty [label="arcp-runtime-jetty"];
+    Otel [label="arcp-otel"];
+    Tck [label="arcp-tck"];
+  }
+
+  Consumer -> Umbrella [label="implementation"];
+
+  edge [color="#94A3B8", penwidth=1.2];
+  Umbrella -> Client [label="api"];
+  Umbrella -> Runtime [label="api"];
+  Client -> Core [label="api"];
+  Runtime -> Core [label="api"];
+
+  edge [color="#475569", penwidth=1.0, style=dashed];
+  Jetty -> Runtime [label="implementation"];
+  Otel -> Core [label="api"];
+  Tck -> Client [label="api"];
+  Tck -> Runtime [label="api"];
+}

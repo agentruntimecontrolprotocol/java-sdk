@@ -1,0 +1,74 @@
+// Job FSM (dark variant).
+
+digraph JobLifecycle {
+  rankdir=TB;
+  bgcolor="transparent";
+  compound=true;
+  fontname="Helvetica";
+  splines=spline;
+  nodesep=0.30;
+  ranksep=0.55;
+  pad="0.35,0.25";
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#334155",
+    color="#475569",
+    fontname="Helvetica",
+    fontsize=11,
+    fontcolor="#F1F5F9",
+    margin="0.22,0.11",
+    penwidth=1.0
+  ];
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    fontcolor="#94A3B8",
+    color="#64748B",
+    penwidth=1.1,
+    arrowsize=0.75,
+    arrowhead=vee
+  ];
+
+  Submit [
+    label=<<FONT POINT-SIZE="12"><B>job.submit</B></FONT>>,
+    fillcolor="#3B82F6", color="#2563EB",
+    fontcolor="white", penwidth=1.4
+  ];
+
+  subgraph cluster_states {
+    label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="0" CELLSPACING="0"><TR><TD COLSPAN="3" HEIGHT="8"></TD></TR><TR><TD WIDTH="8"></TD><TD><FONT POINT-SIZE="12"><B>JobRecord.Status</B></FONT></TD><TD WIDTH="8"></TD></TR></TABLE>>;
+    style="rounded,filled";
+    fillcolor="#0F172A";
+    color="#334155";
+    fontname="Helvetica";
+    fontcolor="#94A3B8";
+    margin=14;
+    labeljust=l;
+    penwidth=1.0;
+
+    Pending [label="PENDING"];
+    Running [
+      label=<<FONT POINT-SIZE="12"><B>RUNNING</B></FONT>>,
+      fillcolor="#F59E0B", color="#D97706",
+      fontcolor="white", penwidth=1.4
+    ];
+    Success [label="SUCCESS"];
+    Error [label="ERROR"];
+    Cancelled [label="CANCELLED"];
+    TimedOut [label="TIMED_OUT"];
+  }
+
+  edge [color="#94A3B8", penwidth=1.2];
+  Submit -> Pending [label="job.accepted\n§7.1"];
+  Pending -> Running [label="worker pool dispatch"];
+  Running -> Success [label="job.result\n§7.3"];
+
+  edge [color="#F87171", fontcolor="#F87171", style=dashed, penwidth=1.1];
+  Running -> Error [label="LEASE_EXPIRED\n§9.5"];
+  Running -> Error [label="BUDGET_EXHAUSTED\n§9.6"];
+  Running -> Error [label="INTERNAL_ERROR\n§12"];
+  Running -> Cancelled [label="job.cancel / interrupt\n§7.4"];
+  Running -> TimedOut [label="max_runtime_sec\n§7.3"];
+}
