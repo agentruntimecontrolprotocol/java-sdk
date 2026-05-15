@@ -31,12 +31,6 @@ publishing {
             pom {
                 name.set("arcp-middleware-spring-boot")
                 description.set("Spring Boot 3.x adapter for ARCP runtimes.")
-                licenses {
-                    license {
-                        name.set("Apache-2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    }
-                }
             }
         }
     }

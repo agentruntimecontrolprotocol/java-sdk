@@ -23,12 +23,6 @@ publishing {
             pom {
                 name.set("arcp-tck")
                 description.set("Conformance harness for ARCP runtime implementations.")
-                licenses {
-                    license {
-                        name.set("Apache-2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    }
-                }
             }
         }
     }

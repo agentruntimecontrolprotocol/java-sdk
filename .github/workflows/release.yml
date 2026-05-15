@@ -1,0 +1,78 @@
+name: release
+
+# Triggered manually from the Actions tab; the operator confirms the version
+# in the input field and the workflow handles tagging and Sonatype staging.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Skip the Sonatype upload (build + sign locally only)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    name: publish (${{ inputs.version }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write  # for tagging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Configure git for tagging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Set release version
+        run: |
+          # Replace `version = "x.x.x-SNAPSHOT"` with the supplied release version.
+          sed -i 's|version = ".*"|version = "${{ inputs.version }}"|' build.gradle.kts
+          grep '^[ ]*version =' build.gradle.kts
+
+      - name: Build + test
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Publish to Sonatype Central
+        if: ${{ !inputs.dry_run }}
+        env:
+          ORG_GRADLE_PROJECT_ossrhUsername: ${{ secrets.OSSRH_USERNAME }}
+          ORG_GRADLE_PROJECT_ossrhPassword: ${{ secrets.OSSRH_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_SIGNING_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon --stacktrace \
+            :arcp-core:publish \
+            :arcp-client:publish \
+            :arcp-runtime:publish \
+            :arcp:publish \
+            :arcp-otel:publish \
+            :arcp-runtime-jetty:publish \
+            :arcp-middleware-jakarta:publish \
+            :arcp-middleware-spring-boot:publish \
+            :arcp-middleware-vertx:publish \
+            :arcp-tck:publish
+
+      - name: Local publish (dry run)
+        if: ${{ inputs.dry_run }}
+        run: ./gradlew publishToMavenLocal --no-daemon --stacktrace
+
+      - name: Tag the release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git tag -a "v${{ inputs.version }}" -m "Release ${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"

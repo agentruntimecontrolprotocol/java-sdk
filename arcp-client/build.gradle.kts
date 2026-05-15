@@ -11,7 +11,14 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.assertj)
     testImplementation(libs.awaitility)
+    testImplementation(libs.jqwik)
     testRuntimeOnly(libs.slf4j.simple)
+}
+
+tasks.named<Test>("test") {
+    useJUnitPlatform {
+        includeEngines("junit-jupiter", "jqwik")
+    }
 }
 
 publishing {
@@ -22,12 +29,6 @@ publishing {
             pom {
                 name.set("arcp-client")
                 description.set("ARCP client SDK.")
-                licenses {
-                    license {
-                        name.set("Apache-2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    }
-                }
             }
         }
     }

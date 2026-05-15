@@ -126,7 +126,7 @@ works" is decomposed into multiple binary rows.
 | §14 Subscribe scope (no cross-principal leak) | Implemented | [SessionLoop.handleSubscribe](arcp-runtime/src/main/java/dev/arcp/runtime/session/SessionLoop.java) |
 | §14 Budget bypass protection | Implemented | [BudgetCounters.ensureAllPositive](arcp-runtime/src/main/java/dev/arcp/runtime/lease/BudgetCounters.java) gates every authorize call |
 | §14 Lease clock check (no past `expires_at`) | Implemented | [LeaseGuard.authorize](arcp-runtime/src/main/java/dev/arcp/runtime/lease/LeaseGuard.java) |
-| §14 Host-header / Origin allowlist on WS upgrade | Deferred | Tracked on the `ArcpJettyServer.Builder.allowedHosts` field; enforcement is left to the consumer in 1.0.0. |
+| §14 Host-header / Origin allowlist on WS upgrade | Implemented | [ArcpJakartaAdapter](arcp-middleware-jakarta/src/main/java/dev/arcp/middleware/jakarta/ArcpJakartaAdapter.java) Builder.allowedHosts / allowedOrigins; [ArcpVertxHandler](arcp-middleware-vertx/src/main/java/dev/arcp/middleware/vertx/ArcpVertxHandler.java) Builder.allowedHosts; Spring adapter at the [ArcpSpringBootProperties](arcp-middleware-spring-boot/src/main/java/dev/arcp/middleware/spring/ArcpSpringBootProperties.java) level |
 
 ## Out-of-scope for 1.0.0
 
@@ -134,10 +134,9 @@ works" is decomposed into multiple binary rows.
 - mTLS / OAuth2 auth schemes
 - stdio newline-delimited JSON transport (`MemoryTransport` covers in-process use)
 - §15.6 trust elevation
-- Quarkus and Helidon middleware (Phase 5 deferred them; `arcp-runtime-jetty` is the
-  shipped default)
-- `arcp-middleware-spring-boot` and `arcp-middleware-vertx` (planning artifacts; the
-  `Transport` SPI is small enough to wrap directly for those who need them)
+- Quarkus and Helidon middleware (Phase 5 deferred them; `arcp-runtime-jetty`,
+  `arcp-middleware-jakarta`, `arcp-middleware-spring-boot`, and
+  `arcp-middleware-vertx` cover the four major JVM WebSocket entry points)
 
 ## Tests
 
@@ -147,7 +146,10 @@ Counts after `./gradlew test`:
 |---|---|---|
 | arcp-core | 4 | green |
 | arcp-runtime | 10 | green |
-| arcp-client | 11 | green |
+| arcp-client | 8 | green |
 | arcp-otel | 1 | green |
 | arcp-runtime-jetty | 1 | green |
+| arcp-middleware-jakarta | 1 | green |
+| arcp-middleware-spring-boot | 1 | green |
+| arcp-middleware-vertx | 1 | green |
 | arcp-tck (self-validation) | 7 dynamic | green |

@@ -1,0 +1,35 @@
+name: pitest-nightly
+
+on:
+  schedule:
+    # 04:00 UTC daily — off-peak for Actions runners
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  pitest:
+    name: pitest (${{ matrix.module }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [arcp-core, arcp-runtime]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run PIT mutation analysis
+        run: ./gradlew :${{ matrix.module }}:pitest --no-daemon --stacktrace
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitest-${{ matrix.module }}
+          path: ${{ matrix.module }}/build/reports/pitest/

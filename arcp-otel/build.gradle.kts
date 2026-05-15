@@ -25,12 +25,6 @@ publishing {
             pom {
                 name.set("arcp-otel")
                 description.set("OpenTelemetry adapter for ARCP transports.")
-                licenses {
-                    license {
-                        name.set("Apache-2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    }
-                }
             }
         }
     }

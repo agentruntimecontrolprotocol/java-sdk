@@ -6,9 +6,11 @@ plugins {
 dependencies {
     api(project(":arcp-runtime"))
     compileOnly(libs.jakarta.websocket.api)
+    compileOnly(libs.jakarta.websocket.client.api)
 
     testImplementation(project(":arcp-client"))
     testImplementation(libs.jakarta.websocket.api)
+    testImplementation(libs.jakarta.websocket.client.api)
     testImplementation(libs.jetty.server)
     testImplementation(libs.jetty.ee10.servlet)
     testImplementation(libs.jetty.ee10.websocket.jakarta.server)
@@ -26,12 +28,6 @@ publishing {
             pom {
                 name.set("arcp-middleware-jakarta")
                 description.set("Jakarta WebSocket endpoint adapter for ARCP runtimes.")
-                licenses {
-                    license {
-                        name.set("Apache-2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    }
-                }
             }
         }
     }

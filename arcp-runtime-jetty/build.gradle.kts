@@ -25,12 +25,6 @@ publishing {
             pom {
                 name.set("arcp-runtime-jetty")
                 description.set("Embedded Jetty 12 WebSocket transport for ARCP runtimes.")
-                licenses {
-                    license {
-                        name.set("Apache-2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
-                    }
-                }
             }
         }
     }

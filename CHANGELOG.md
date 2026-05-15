@@ -25,6 +25,11 @@ Initial release of the ARCP Java SDK.
 - `arcp-middleware-spring-boot`: Spring Boot 3.x auto-configuration registers
   an `ArcpWebSocketHandler` at the configured path whenever an `ArcpRuntime`
   bean is declared.
+- `arcp-middleware-jakarta`: plain Jakarta WebSocket adapter exposing
+  `ArcpJakartaAdapter.serverEndpointConfig()` for consumers running their own
+  Servlet container (Tomcat, Undertow, Jetty in Servlet mode).
+- `arcp-middleware-vertx`: Vert.x 5 `Handler<ServerWebSocket>` adapter with
+  path and Host-header allowlist gates.
 - `arcp-tck`: reusable JUnit 5 `@TestFactory` conformance suite parameterised
   by a `TckProvider` SPI, so downstream JVM ARCP implementations can ride the
   same checks.
@@ -43,13 +48,46 @@ Six Graphviz diagrams (light + dark variants, 12 SVGs total) under
 negotiation, heartbeat + ack, result-chunk reassembly. Render with
 `make -C docs/diagrams`.
 
+### Documentation
+
+A prose tree under `docs/` mirroring the spec layout: `00-overview.md`,
+`01-quickstart.md`, `02-concepts.md`, `03-features/*` (heartbeats, ack,
+list-jobs, subscribe, progress, result-chunk, lease-expires-at, cost-budget,
+agent-versions), and `05-reference/*` (api-overview, error-taxonomy,
+wire-format).
+
 ### Tests
 
-32 tests across 12 suites cover the wire round-trip, capability intersection,
+40 tests across 18 suites cover the wire round-trip, capability intersection,
 agent version resolution, budget arithmetic on `BigDecimal`, lease expiry,
 glob matching, idempotency reuse and conflict, subscribe with history replay,
-result-chunk reassembly, span emission, the Jetty WebSocket end-to-end, the
-Spring Boot end-to-end, and seven conformance dynamic tests.
+result-chunk reassembly, span emission, the Jetty / Jakarta / Vert.x /
+Spring Boot WebSocket end-to-ends, the stdio newline-delimited JSON
+end-to-end, seven conformance dynamic tests, and three jqwik property tests
+(envelope round-trip + unknown-field tolerance, BigDecimal budget arithmetic,
+arbitrary result-chunk arrival-order reassembly).
+
+PIT mutation testing is wired as an opt-in Gradle task on `arcp-core` and
+`arcp-runtime` (`./gradlew :arcp-core:pitest`); it is intentionally not
+gated on PR builds because mutation runs are 5–10× the unit-test pass.
+
+### Transports
+
+A new newline-delimited JSON `StdioTransport` (`§4.2`) under
+`dev.arcp.core.transport`, with a round-trip test that wires both peers
+through a queue-backed pipe pair. Suitable for parent–child process
+deployments where the agent rides as a subprocess and the parent owns
+stdin/stdout.
+
+### Publishing
+
+Maven Central scaffolding consolidated into the root `build.gradle.kts`:
+single licence block per POM, full developer info, SCM URLs, GitHub
+issue tracker, Sonatype staging endpoints (snapshots vs releases auto-
+selected by `version`), and PGP signing wired through
+`signingKey` / `signingPassword` (or `GPG_SIGNING_KEY` /
+`GPG_SIGNING_PASSWORD`). Signing is required only when the keys are
+supplied; local builds skip it silently.
 
 ### Build
 

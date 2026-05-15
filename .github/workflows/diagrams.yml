@@ -1,0 +1,35 @@
+name: diagrams
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/diagrams/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/diagrams/**"
+
+jobs:
+  drift-check:
+    name: re-render and diff
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
+      - name: Record dot version
+        run: dot -V
+
+      - name: Re-render SVGs
+        run: make -C docs/diagrams clean all
+
+      - name: Diff against committed SVGs
+        run: |
+          if ! git diff --exit-code docs/diagrams/*.svg; then
+            echo "::error::Committed SVGs differ from a fresh dot render."
+            echo "Run 'make -C docs/diagrams' locally and commit the result."
+            exit 1
+          fi

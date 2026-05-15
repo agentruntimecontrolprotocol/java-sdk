@@ -204,8 +204,6 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
         scheduler.shutdownNow();
     }
 
-    // ---------------------------------------------------------- inbound
-
     @Override
     public void onSubscribe(Flow.Subscription s) {
         this.subscription = s;
@@ -238,6 +236,8 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
                     new IllegalStateException("transport closed before welcome"));
         }
     }
+
+    // ---------------------------------------------------------- inbound
 
     private void dispatch(Envelope envelope) {
         Message m;

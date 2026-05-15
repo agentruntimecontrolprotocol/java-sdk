@@ -63,6 +63,8 @@ class Quickstart {
 For a WebSocket-backed runtime, swap `MemoryTransport` for
 `dev.arcp.runtime.jetty.ArcpJettyServer` on the runtime side and
 `dev.arcp.client.WebSocketTransport.connect(uri)` on the client side.
+For a child-process agent, both peers wrap their `stdin` / `stdout` in
+`dev.arcp.core.transport.StdioTransport` (§4.2 newline-delimited JSON).
 
 ## Packaging
 
@@ -74,6 +76,8 @@ For a WebSocket-backed runtime, swap `MemoryTransport` for
 | `arcp`                         | Umbrella; re-exports client + runtime              | `arcp-client`, `arcp-runtime`   |
 | `arcp-runtime-jetty`           | Embedded Jetty 12 WebSocket server transport       | `arcp-runtime`                  |
 | `arcp-middleware-spring-boot`  | Spring Boot 3.x auto-config + WebSocket handler    | `arcp-runtime`                  |
+| `arcp-middleware-jakarta`      | Plain Jakarta WebSocket adapter (`ServerEndpointConfig`) | `arcp-runtime`            |
+| `arcp-middleware-vertx`        | Vert.x 5 WebSocket handler                         | `arcp-runtime`                  |
 | `arcp-otel`                    | OpenTelemetry adapter (transport-wrapping `Tracer`)| `arcp-core`, `opentelemetry-api`|
 | `arcp-tck`                     | Reusable JUnit 5 `@TestFactory` conformance suite  | `arcp-client`, `arcp-runtime`   |
 
@@ -90,9 +94,19 @@ java-sdk/
 ├── arcp/                      # umbrella
 ├── arcp-runtime-jetty/
 ├── arcp-otel/
+├── arcp-middleware-jakarta/
 ├── arcp-middleware-spring-boot/
+├── arcp-middleware-vertx/
 ├── arcp-tck/
-├── docs/diagrams/             # 6 Graphviz diagrams (light + dark SVGs)
+├── docs/
+│   ├── 00-overview.md
+│   ├── 01-quickstart.md
+│   ├── 02-concepts.md
+│   ├── 03-features/           # heartbeats, ack, list-jobs, subscribe, progress,
+│   │                          # result-chunk, lease-expires-at, cost-budget,
+│   │                          # agent-versions
+│   ├── 05-reference/          # api-overview, error-taxonomy, wire-format
+│   └── diagrams/              # 6 Graphviz diagrams (light + dark SVGs)
 └── examples/
     ├── submit-and-stream/
     ├── cancel/
@@ -172,12 +186,50 @@ references. Tests at a glance:
 - `arcp-runtime-jetty:test` — end-to-end client + runtime over loopback WebSocket
 - `arcp-middleware-spring-boot:test` — Spring Boot 3.x autoconfig + WebSocket
   handler driven from a `@SpringBootTest` with an embedded Tomcat
+- `arcp-middleware-jakarta:test` — Jakarta WebSocket `ServerEndpointConfig`
+  registered against an embedded Jetty container
+- `arcp-middleware-vertx:test` — Vert.x 5 `HttpServer.webSocketHandler`
+  driven from a `Vertx.vertx()` test fixture
 - `arcp-tck:test` — seven dynamic conformance tests via JUnit `@TestFactory`,
   reusable by downstream JVM implementations
 
 Diagrams under [`docs/diagrams/`](docs/diagrams/): module graph, session
 lifecycle, job lifecycle, capability negotiation, heartbeat + ack, result-chunk
 reassembly. Light + dark variants render via `make -C docs/diagrams`.
+
+## Publishing
+
+Maven Central credentials and PGP signing are wired in the root
+`build.gradle.kts`. Set the following Gradle properties (in
+`~/.gradle/gradle.properties` or as `ORG_GRADLE_PROJECT_*` env vars):
+
+```
+ossrhUsername=...
+ossrhPassword=...
+signingKey=...        # PGP private key, in-memory format
+signingPassword=...
+```
+
+Snapshot vs release routing is automatic from the `version` qualifier;
+signing is required only when the PGP credentials are present (local
+builds skip it silently). Publish a SNAPSHOT to local Maven with:
+
+```bash
+./gradlew :arcp-core:publishToMavenLocal
+```
+
+## Mutation testing
+
+PIT is wired on `arcp-core` and `arcp-runtime` as an opt-in Gradle task:
+
+```bash
+./gradlew :arcp-core:pitest
+./gradlew :arcp-runtime:pitest
+```
+
+Reports land under each module's `build/reports/pitest/`. The mutation
+threshold is set to 0 so the run never fails the build; treat the HTML
+report as a code-review signal, not a gate.
 
 ## License
 
