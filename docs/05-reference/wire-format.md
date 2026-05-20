@@ -13,7 +13,7 @@ since: "1.0.0"
 
 ```json
 {
-  "arcp": "1",
+  "arcp": "1.1",
   "id": "01J…",
   "type": "session.hello",
   "session_id": "sess_…",
@@ -26,7 +26,7 @@ since: "1.0.0"
 
 | Field | Java type | Always required |
 |---|---|---|
-| `arcp` | `String` | yes (`Envelope.VERSION = "1"`) |
+| `arcp` | `String` | yes (`Envelope.VERSION = "1.1"`) |
 | `id` | [`MessageId`](../../arcp-core/src/main/java/dev/arcp/core/ids/MessageId.java) | yes (ULID, monotonic per process) |
 | `type` | discriminator → [`Message.Type`](../../arcp-core/src/main/java/dev/arcp/core/messages/Message.java) | yes |
 | `payload` | `JsonNode` then decoded per type | yes |

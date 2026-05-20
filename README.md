@@ -131,7 +131,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 
 ## Features
 
-- §5.1 envelope with `arcp: "1"` and `FAIL_ON_UNKNOWN_PROPERTIES=false`
+- §5.1 envelope with `arcp: "1.1"` and `FAIL_ON_UNKNOWN_PROPERTIES=false`
 - §6.1 bearer auth via `BearerVerifier` SPI; `acceptAny` and `staticToken` helpers
 - §6.2 capability intersection with rich `agents` shape (name + versions + default)
 - §6.3 resume buffer (in-memory ring) and rotating `resume_token`

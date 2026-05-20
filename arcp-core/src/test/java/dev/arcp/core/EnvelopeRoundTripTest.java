@@ -35,7 +35,7 @@ class EnvelopeRoundTripTest {
         String json = mapper.writeValueAsString(original);
         Envelope parsed = mapper.readValue(json, Envelope.class);
 
-        assertThat(parsed.arcp()).isEqualTo("1");
+        assertThat(parsed.arcp()).isEqualTo("1.1");
         assertThat(parsed.id()).isEqualTo(MessageId.of("m_1"));
         assertThat(parsed.sessionId()).isEqualTo(sid);
         assertThat(parsed.type()).isEqualTo("session.hello");
