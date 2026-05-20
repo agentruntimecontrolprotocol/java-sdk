@@ -1,6 +1,6 @@
 # Conformance — ARCP Java SDK 1.0.0
 
-This SDK targets [draft-arcp-02.1.md](../spec/docs/draft-arcp-02.1.md). Each
+This SDK targets [draft-arcp-1.1.md](../spec/docs/draft-arcp-1.1.md). Each
 row is **Implemented** with a `path:line` reference or **Deferred** with a
 one-line rationale. There is no "Partial" status: a row that "partially
 works" is decomposed into multiple binary rows.

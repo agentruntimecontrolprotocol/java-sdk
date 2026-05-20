@@ -13,7 +13,7 @@ The **Agent Runtime Control Protocol (ARCP)** is a JSON-over-WebSocket
 protocol that lets a client submit jobs to a runtime, observe their events,
 enforce per-job leases (filesystem, network, tool, budget), and reattach to
 work after a disconnect. The full spec lives at
-[`../spec/docs/draft-arcp-02.1.md`](../../spec/docs/draft-arcp-02.1.md).
+[`../spec/docs/draft-arcp-1.1.md`](../../spec/docs/draft-arcp-1.1.md).
 
 The Java SDK is a JDK 21+ reference implementation. It ships:
 

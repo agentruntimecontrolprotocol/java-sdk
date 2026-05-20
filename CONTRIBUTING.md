@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for considering a contribution. This SDK tracks
-[`draft-arcp-02.1.md`](../spec/docs/draft-arcp-02.1.md). Behavior changes that
+[`draft-arcp-1.1.md`](../spec/docs/draft-arcp-1.1.md). Behavior changes that
 diverge from the spec are out of scope unless they fix a clear interpretation
 bug; please open an issue first to discuss.
 
