@@ -78,8 +78,6 @@ public final class ConformanceSuite {
         void run(TckProvider provider, ArcpClient client) throws Exception;
     }
 
-    // ------------------------------------------------------ assertions
-
     private static void handshakeReturnsWelcome(TckProvider p, ArcpClient client) throws Exception {
         Session session = client.connect(Duration.ofSeconds(5));
         assertThat(session.sessionId()).isNotNull();

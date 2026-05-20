@@ -237,8 +237,6 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
         }
     }
 
-    // ---------------------------------------------------------- inbound
-
     private void dispatch(Envelope envelope) {
         Message m;
         try {
@@ -402,8 +400,6 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
         send(Message.Type.SESSION_PONG, pong, sessionId, null, null, null);
     }
 
-    // ---------------------------------------------------------- send
-
     private void send(
             Message.Type type,
             Message payload,
@@ -427,8 +423,6 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
                 Envelope.VERSION, id, type.wire(), sid, tid, jid, seq, payloadJson);
         transport.send(env);
     }
-
-    // ---------------------------------------------------------- internals
 
     private final class Outstanding {
         final CompletableFuture<JobHandle> handleFuture = new CompletableFuture<>();

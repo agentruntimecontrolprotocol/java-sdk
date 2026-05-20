@@ -178,8 +178,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
         runtime.removeSession(this);
     }
 
-    // ---------------------------------------------------------- dispatch
-
     private void handle(Envelope envelope) {
         Phase p = phase;
         Message m;
@@ -221,8 +219,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             case SessionJobs ignored -> log.warn("client-only message received: {}", m);
         }
     }
-
-    // ---------------------------------------------------------- handshake
 
     private void doHandshake(SessionHello hello) {
         try {
@@ -275,8 +271,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                 "unsupported auth scheme: " + auth.scheme());
     }
 
-    // ---------------------------------------------------------- heartbeat
-
     private void tickHeartbeat(Duration interval) {
         if (phase != Phase.ACTIVE) {
             return;
@@ -292,8 +286,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             send(Message.Type.SESSION_PING, ping, sessionId, null, null, null);
         }
     }
-
-    // ---------------------------------------------------------- control
 
     private void handleBye(SessionBye bye) {
         log.debug("session {} bye: {}", sessionId, bye.reason());
@@ -335,8 +327,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
         SessionJobs response = new SessionJobs(requestId, matching, null);
         send(Message.Type.SESSION_JOBS, response, sessionId, null, null, null);
     }
-
-    // ---------------------------------------------------------- jobs
 
     private void handleSubmit(Envelope envelope, JobSubmit submit) {
         Principal pr = principal;
@@ -599,8 +589,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             rec.subscribers().removeIf(s -> s.session() == this);
         }
     }
-
-    // ---------------------------------------------------------- emission
 
     private void emitJobEvent(JobRecord record, EventBody body) {
         long seq = nextSeq();
