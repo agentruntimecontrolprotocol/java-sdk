@@ -4,7 +4,7 @@ digraph HeartbeatAck {
   rankdir=LR;
   bgcolor="transparent";
   compound=true;
-  fontname="Helvetica";
+  fontname="TT Commons Pro Trial";
   splines=spline;
   nodesep=0.34;
   ranksep=0.70;
@@ -15,14 +15,14 @@ digraph HeartbeatAck {
     style="rounded,filled",
     fillcolor="white",
     color="#CBD5E1",
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=11,
     fontcolor="#1F2937",
     margin="0.22,0.11",
     penwidth=1.0
   ];
   edge [
-    fontname="Helvetica",
+    fontname="TT Commons Pro Trial",
     fontsize=9,
     fontcolor="#64748B",
     color="#94A3B8",
@@ -36,7 +36,7 @@ digraph HeartbeatAck {
     style="rounded,filled";
     fillcolor="#F1F5F9";
     color="#E2E8F0";
-    fontname="Helvetica";
+    fontname="TT Commons Pro Trial";
     fontcolor="#475569";
     margin=14;
     labeljust=l;
@@ -58,7 +58,7 @@ digraph HeartbeatAck {
     style="rounded,filled";
     fillcolor="#F8FAFC";
     color="#E2E8F0";
-    fontname="Helvetica";
+    fontname="TT Commons Pro Trial";
     fontcolor="#475569";
     margin=14;
     labeljust=l;
