@@ -1,23 +1,23 @@
 [versions]
-jackson = "2.18.2"
-slf4j = "2.0.16"
+jackson = "2.21.3"
+slf4j = "2.0.18"
 jspecify = "1.0.0"
-ulid = "5.2.3"
+ulid = "5.2.4"
 
-junit = "5.11.4"
-assertj = "3.26.3"
-awaitility = "4.2.2"
-jqwik = "1.9.2"
-pitest-plugin = "1.19.0-rc.1"
+junit = "6.1.0"
+assertj = "3.27.7"
+awaitility = "4.3.0"
+jqwik = "1.9.3"
+pitest-plugin = "1.19.0"
 pitest-core = "1.17.4"
 pitest-junit5 = "1.2.1"
 
-opentelemetry = "1.44.1"
-jetty = "12.0.16"
-spring-boot = "3.4.1"
-spring = "6.2.1"
+opentelemetry = "1.62.0"
+jetty = "12.1.9"
+spring-boot = "4.0.6"
+spring = "7.0.7"
 jakarta-websocket = "2.2.0"
-vertx = "5.0.0"
+vertx = "5.0.12"
 
 [libraries]
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
