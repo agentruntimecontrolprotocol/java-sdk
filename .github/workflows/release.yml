@@ -54,7 +54,7 @@ jobs:
           CENTRAL_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_SIGNING_PASSWORD }}
-        run: ./gradlew --no-daemon --stacktrace publishAllPublicationsToMavenCentral
+        run: ./gradlew --no-daemon --stacktrace publishAggregationToCentralPortal
 
       - name: Local publish (dry run)
         if: ${{ inputs.dry_run }}

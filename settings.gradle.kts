@@ -1,3 +1,15 @@
+plugins {
+    id("com.gradleup.nmcp.settings") version "1.5.0"
+}
+
+nmcpSettings {
+    centralPortal {
+        username = System.getenv("CENTRAL_USERNAME")?.ifBlank { null } ?: ""
+        password = System.getenv("CENTRAL_PASSWORD")?.ifBlank { null } ?: ""
+        publishingType = "AUTOMATIC"
+    }
+}
+
 rootProject.name = "arcp"
 
 include(
