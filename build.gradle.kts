@@ -1,5 +1,21 @@
 plugins {
+    id("com.gradleup.nmcp") version "0.0.8"
     id("com.diffplug.spotless") version "6.25.0" apply false
+}
+
+// Publish all subproject maven-publish publications to Maven Central via the
+// Central Publisher Portal REST API (replaces the retired s01.oss.sonatype.org
+// OSSRH staging endpoint).  Credentials are read from CENTRAL_USERNAME /
+// CENTRAL_PASSWORD environment variables (or the corresponding Gradle
+// properties).  publicationType = "AUTOMATIC" auto-releases after upload.
+nmcp {
+    publishAllProjectsProbablyBreakingProjectIsolation {
+        username = (findProperty("centralUsername") as String?)?.ifBlank { null }
+                ?: System.getenv("CENTRAL_USERNAME")?.ifBlank { null } ?: ""
+        password = (findProperty("centralPassword") as String?)?.ifBlank { null }
+                ?: System.getenv("CENTRAL_PASSWORD")?.ifBlank { null } ?: ""
+        publicationType = "AUTOMATIC"
+    }
 }
 
 allprojects {
@@ -87,28 +103,8 @@ subprojects {
                         }
                     }
                 }
-
-                // Sonatype Central. Credentials read from gradle.properties or
-                // ORG_GRADLE_PROJECT_* environment variables; the deploy target
-                // resolves to the OSS staging endpoint by default and to the
-                // snapshots repository when `version` carries the SNAPSHOT
-                // qualifier.
-                repositories {
-                    maven {
-                        name = "central"
-                        val releases = uri(
-                                "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
-                        val snapshots = uri(
-                                "https://s01.oss.sonatype.org/content/repositories/snapshots/")
-                        url = if (version.toString().endsWith("SNAPSHOT")) snapshots else releases
-                        credentials {
-                            username = (findProperty("ossrhUsername") as String?)
-                                    ?: System.getenv("OSSRH_USERNAME") ?: ""
-                            password = (findProperty("ossrhPassword") as String?)
-                                    ?: System.getenv("OSSRH_PASSWORD") ?: ""
-                        }
-                    }
-                }
+                // No maven repository block here — nmcp handles Central Portal
+                // upload at the root project level.
             }
 
             // Signing is only wired when the developer has supplied a PGP key.
