@@ -1,7 +1,7 @@
 name: release
 
 # Triggered manually from the Actions tab; the operator confirms the version
-# in the input field and the workflow handles tagging and Sonatype staging.
+# in the input field and the workflow handles tagging and Central Portal upload.
 on:
   workflow_dispatch:
     inputs:
@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       dry_run:
-        description: "Skip the Sonatype upload (build + sign locally only)"
+        description: "Skip the Maven Central upload (build + sign locally only)"
         required: false
         type: boolean
         default: false
@@ -47,25 +47,14 @@ jobs:
       - name: Build + test
         run: ./gradlew build --no-daemon --stacktrace
 
-      - name: Publish to Sonatype Central
+      - name: Publish to Maven Central
         if: ${{ !inputs.dry_run }}
         env:
-          ORG_GRADLE_PROJECT_ossrhUsername: ${{ secrets.OSSRH_USERNAME }}
-          ORG_GRADLE_PROJECT_ossrhPassword: ${{ secrets.OSSRH_PASSWORD }}
+          CENTRAL_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_SIGNING_PASSWORD }}
-        run: |
-          ./gradlew --no-daemon --stacktrace \
-            :arcp-core:publish \
-            :arcp-client:publish \
-            :arcp-runtime:publish \
-            :arcp:publish \
-            :arcp-otel:publish \
-            :arcp-runtime-jetty:publish \
-            :arcp-middleware-jakarta:publish \
-            :arcp-middleware-spring-boot:publish \
-            :arcp-middleware-vertx:publish \
-            :arcp-tck:publish
+        run: ./gradlew --no-daemon --stacktrace publishAllPublicationsToMavenCentral
 
       - name: Local publish (dry run)
         if: ${{ inputs.dry_run }}
