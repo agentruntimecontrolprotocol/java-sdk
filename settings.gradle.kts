@@ -10,7 +10,10 @@ nmcpSettings {
     }
 }
 
-rootProject.name = "arcp"
+// Root project name must not clash with any subproject name. The :arcp
+// subproject is the published aggregation BOM; name the root build
+// differently so nmcp 1.5.0 can resolve the aggregation unambiguously.
+rootProject.name = "arcp-sdk"
 
 include(
     ":arcp-core",
