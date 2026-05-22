@@ -5,8 +5,12 @@ import dev.arcp.core.ids.JobId;
 import dev.arcp.core.ids.TraceId;
 import dev.arcp.core.lease.Lease;
 import dev.arcp.core.lease.LeaseConstraints;
+import dev.arcp.core.credentials.CredentialId;
+import dev.arcp.runtime.credentials.IssuedCredential;
 import dev.arcp.runtime.lease.BudgetCounters;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
@@ -53,6 +57,7 @@ public final class JobRecord {
     private final CopyOnWriteArrayList<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private volatile @Nullable Future<?> worker;
     private volatile @Nullable ScheduledFuture<?> expiryWatchdog;
+    private final CopyOnWriteArrayList<IssuedCredential> credentials = new CopyOnWriteArrayList<>();
 
     public JobRecord(
             JobId jobId,
@@ -146,6 +151,36 @@ public final class JobRecord {
 
     public CopyOnWriteArrayList<Subscriber> subscribers() {
         return subscribers;
+    }
+
+    public List<IssuedCredential> credentials() {
+        return List.copyOf(credentials);
+    }
+
+    public void setCredentials(List<IssuedCredential> issued) {
+        credentials.clear();
+        credentials.addAll(issued);
+    }
+
+    public @Nullable IssuedCredential replaceCredential(
+            CredentialId id, IssuedCredential next) {
+        IssuedCredential prior = null;
+        for (int i = 0; i < credentials.size(); i++) {
+            IssuedCredential current = credentials.get(i);
+            if (current.wire().id().equals(id)) {
+                prior = current;
+                credentials.set(i, next);
+                return prior;
+            }
+        }
+        credentials.add(next);
+        return null;
+    }
+
+    public List<IssuedCredential> drainCredentials() {
+        List<IssuedCredential> drained = new ArrayList<>(credentials);
+        credentials.clear();
+        return drained;
     }
 
     public record Subscriber(SessionLoop session, JobId jobId) {}

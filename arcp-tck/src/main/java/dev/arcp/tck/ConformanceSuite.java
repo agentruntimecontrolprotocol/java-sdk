@@ -8,16 +8,26 @@ import dev.arcp.client.ArcpClient;
 import dev.arcp.client.JobHandle;
 import dev.arcp.client.Session;
 import dev.arcp.core.capabilities.Feature;
+import dev.arcp.core.credentials.Credential;
+import dev.arcp.core.credentials.CredentialId;
+import dev.arcp.core.credentials.CredentialScheme;
 import dev.arcp.core.error.AgentVersionNotAvailableException;
 import dev.arcp.core.error.DuplicateKeyException;
 import dev.arcp.core.events.LogEvent;
+import dev.arcp.core.lease.Lease;
 import dev.arcp.core.messages.JobResult;
+import dev.arcp.runtime.credentials.CredentialProvisioner;
+import dev.arcp.runtime.credentials.CredentialRevocationStore;
+import dev.arcp.runtime.credentials.InMemoryCredentialRevocationStore;
+import dev.arcp.runtime.credentials.IssuedCredential;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DynamicTest;
 
 /**
@@ -63,7 +73,10 @@ public final class ConformanceSuite {
                         () -> runWith(factory, ConformanceSuite::unknownAgentVersion)),
                 DynamicTest.dynamicTest(
                         "§8.2 LogEvent reaches the client's events publisher",
-                        () -> runWith(factory, ConformanceSuite::eventsReachSubscriber)));
+                        () -> runWith(factory, ConformanceSuite::eventsReachSubscriber)),
+                DynamicTest.dynamicTest(
+                        "§9.8 provisioned credentials surfaced and revoked",
+                        () -> provisionedCredentialsLifecycle(factory)));
     }
 
     private static void runWith(ProviderFactory factory, Assertion assertion) throws Exception {
@@ -180,5 +193,64 @@ public final class ConformanceSuite {
         });
         handle.result().get(5, TimeUnit.SECONDS);
         assertThat(logs.get()).isGreaterThanOrEqualTo(1);
+    }
+
+    private static void provisionedCredentialsLifecycle(ProviderFactory factory) throws Exception {
+        CredentialId id = CredentialId.of("tck_cred_1");
+        AtomicInteger revokeCount = new AtomicInteger();
+        CredentialProvisioner provisioner = new CredentialProvisioner() {
+            @Override
+            public CompletableFuture<List<IssuedCredential>> issue(
+                    Lease lease,
+                    dev.arcp.core.lease.LeaseConstraints constraints,
+                    dev.arcp.runtime.agent.JobContext ctx) {
+                Credential credential = new Credential(
+                        id,
+                        CredentialScheme.BEARER,
+                        "tck-secret",
+                        "https://llm.example.test/v1",
+                        null,
+                        null);
+                return CompletableFuture.completedFuture(
+                        List.of(new IssuedCredential(credential, "tck-handle")));
+            }
+
+            @Override
+            public CompletableFuture<Void> revoke(CredentialId credentialId) {
+                revokeCount.incrementAndGet();
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        CredentialRevocationStore store = new InMemoryCredentialRevocationStore();
+
+        try (TckProvider provider = factory.create();
+                ArcpClient client = connectCredentialProvider(provider, provisioner, store)) {
+            client.connect(Duration.ofSeconds(5));
+            JobHandle handle = client.submit(ArcpClient.jobSubmit(
+                    "tck-echo@1.0.0",
+                    JsonNodeFactory.instance.objectNode(),
+                    Lease.builder().allow("model.use", "tck/*").build(),
+                    null,
+                    null,
+                    null));
+            assertThat(handle.credentials()).isPresent();
+            assertThat(handle.credentials().orElseThrow()).extracting(Credential::id)
+                    .containsExactly(id);
+            handle.result().get(5, TimeUnit.SECONDS);
+            assertThat(revokeCount.get()).isEqualTo(1);
+            assertThat(store.outstanding()).isEmpty();
+        }
+    }
+
+    private static ArcpClient connectCredentialProvider(
+            TckProvider provider,
+            CredentialProvisioner provisioner,
+            CredentialRevocationStore store) throws Exception {
+        try {
+            return provider.connectWithProvisionedCredentials(provisioner, store);
+        } catch (UnsupportedOperationException unsupported) {
+            Assumptions.abort("provider does not expose provisioned credential wiring");
+            throw unsupported;
+        }
     }
 }

@@ -45,6 +45,11 @@ public final class LeaseGuard {
         }
     }
 
+    public void authorizeModel(String modelId)
+            throws PermissionDeniedException, LeaseExpiredException {
+        authorize("model.use", modelId);
+    }
+
     static boolean matches(String pattern, String value) {
         return globToRegex(pattern).matcher(value).matches();
     }

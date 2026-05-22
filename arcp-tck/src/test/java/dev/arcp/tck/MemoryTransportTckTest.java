@@ -6,6 +6,8 @@ import dev.arcp.core.events.LogEvent;
 import dev.arcp.core.transport.MemoryTransport;
 import dev.arcp.runtime.ArcpRuntime;
 import dev.arcp.runtime.agent.JobOutcome;
+import dev.arcp.runtime.credentials.CredentialProvisioner;
+import dev.arcp.runtime.credentials.CredentialRevocationStore;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DynamicTest;
@@ -35,6 +37,7 @@ class MemoryTransportTckTest {
                                     JsonNodeFactory.instance.objectNode());
                         })
                 .build();
+        private ArcpRuntime credentialRuntime;
 
         @Override
         public ArcpClient connect() {
@@ -44,8 +47,25 @@ class MemoryTransportTckTest {
         }
 
         @Override
+        public ArcpClient connectWithProvisionedCredentials(
+                CredentialProvisioner provisioner, CredentialRevocationStore store) {
+            MemoryTransport[] pair = MemoryTransport.pair();
+            credentialRuntime = ArcpRuntime.builder()
+                    .credentialProvisioner(provisioner)
+                    .credentialRevocationStore(store)
+                    .agent("tck-echo", "1.0.0",
+                            (input, ctx) -> JobOutcome.Success.inline(input.payload()))
+                    .build();
+            credentialRuntime.accept(pair[0]);
+            return ArcpClient.builder(pair[1]).build();
+        }
+
+        @Override
         public void close() {
             runtime.close();
+            if (credentialRuntime != null) {
+                credentialRuntime.close();
+            }
         }
     }
 }

@@ -70,12 +70,35 @@ public final class Lease {
         return wire == null ? empty() : new Lease(wire);
     }
 
-    /** §9.4 subset check: every key/pattern in {@code child} appears in {@code this}. */
+    /** §9.4 subset check: every child pattern is covered by a parent pattern. */
     public boolean contains(Lease child) {
         return child.capabilities.entrySet().stream().allMatch(e -> {
             List<String> parent = capabilities.get(e.getKey());
-            return parent != null && parent.containsAll(e.getValue());
+            return parent != null && e.getValue().stream()
+                    .allMatch(childPattern -> parent.stream()
+                            .anyMatch(parentPattern -> covers(parentPattern, childPattern)));
         });
+    }
+
+    private static boolean covers(String parentPattern, String childPattern) {
+        if (parentPattern.equals(childPattern) || "**".equals(parentPattern)) {
+            return true;
+        }
+        if ("*".equals(parentPattern) && !childPattern.contains("/")) {
+            return true;
+        }
+        if (parentPattern.endsWith("/**")) {
+            String prefix = parentPattern.substring(0, parentPattern.length() - 2);
+            return childPattern.startsWith(prefix);
+        }
+        if (parentPattern.endsWith("/*")) {
+            String prefix = parentPattern.substring(0, parentPattern.length() - 1);
+            if (!childPattern.startsWith(prefix)) {
+                return false;
+            }
+            return !childPattern.substring(prefix.length()).contains("/");
+        }
+        return false;
     }
 
     public static final class Builder {

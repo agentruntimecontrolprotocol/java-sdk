@@ -6,8 +6,11 @@ import dev.arcp.core.auth.Auth;
 import dev.arcp.core.auth.Principal;
 import dev.arcp.core.capabilities.Capabilities;
 import dev.arcp.core.capabilities.Feature;
+import dev.arcp.core.credentials.Credential;
+import dev.arcp.core.credentials.CredentialId;
 import dev.arcp.core.error.ArcpException;
 import dev.arcp.core.error.ErrorCode;
+import dev.arcp.core.error.UpstreamBudgetExhaustedException;
 import dev.arcp.core.events.EventBody;
 import dev.arcp.core.events.MetricEvent;
 import dev.arcp.core.ids.JobId;
@@ -46,6 +49,8 @@ import dev.arcp.runtime.agent.AgentRegistry;
 import dev.arcp.runtime.agent.JobContext;
 import dev.arcp.runtime.agent.JobInput;
 import dev.arcp.runtime.agent.JobOutcome;
+import dev.arcp.runtime.credentials.CredentialBinding;
+import dev.arcp.runtime.credentials.IssuedCredential;
 import dev.arcp.runtime.heartbeat.HeartbeatTracker;
 import dev.arcp.runtime.lease.BudgetCounters;
 import dev.arcp.runtime.lease.LeaseGuard;
@@ -97,6 +102,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     private final AtomicLong lastProcessedSeq = new AtomicLong(-1);
     private final ResumeBuffer resumeBuffer;
     private final HeartbeatTracker heartbeat;
+    private final CredentialBinding credentialBinding;
     private @Nullable ScheduledFuture<?> heartbeatTick;
 
     private final ConcurrentHashMap<JobId, JobRecord> jobs = new ConcurrentHashMap<>();
@@ -111,6 +117,11 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
         this.agents = runtime.agents();
         this.resumeBuffer = new ResumeBuffer(runtime.resumeBufferCapacity());
         this.heartbeat = new HeartbeatTracker(runtime.clock());
+        this.credentialBinding = new CredentialBinding(
+                runtime.credentialProvisioner(),
+                runtime.credentialRevocationStore(),
+                runtime.clock(),
+                this::emitJobEvent);
     }
 
     public String idOrPending() {
@@ -164,6 +175,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                 if (w != null) {
                     w.cancel(true);
                 }
+                credentialBinding.revokeAll(rec);
                 ScheduledFuture<?> watchdog = rec.expiryWatchdog();
                 if (watchdog != null) {
                     watchdog.cancel(false);
@@ -377,6 +389,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                 prior.lease(),
                 prior.constraints().expiresAt() != null ? prior.constraints() : null,
                 budgetSnapshot.isEmpty() ? null : budgetSnapshot,
+                nullableWireCredentials(prior),
                 prior.createdAt(),
                 traceId);
         send(Message.Type.JOB_ACCEPTED, accepted, sessionId, traceId, prior.jobId(), null);
@@ -404,6 +417,29 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                 jobId, resolved.wire(), pr, lease, constraints, budget, now, traceId);
         jobs.put(jobId, record);
 
+        List<Credential> credentials = List.of();
+        if (negotiated.contains(Feature.PROVISIONED_CREDENTIALS)) {
+            try {
+                List<IssuedCredential> issued = runtime.credentialProvisioner()
+                        .issue(lease, constraints, issueContext(record))
+                        .join();
+                credentials = credentialBinding.attach(record, issued);
+            } catch (RuntimeException e) {
+                jobs.remove(jobId);
+                Throwable root = rootCause(e);
+                if (root instanceof UpstreamBudgetExhaustedException budgetError) {
+                    sendJobErrorTopLevel(envelope, ErrorCode.BUDGET_EXHAUSTED,
+                            budgetError.getMessage());
+                } else {
+                    sendJobErrorTopLevel(envelope, ErrorCode.INTERNAL_ERROR,
+                            root.getMessage() != null
+                                    ? root.getMessage()
+                                    : root.getClass().getSimpleName());
+                }
+                return;
+            }
+        }
+
         Map<String, BigDecimal> budgetSnapshot = budget.snapshot();
         JobAccepted accepted = new JobAccepted(
                 jobId,
@@ -411,6 +447,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                 lease,
                 constraints.expiresAt() != null ? constraints : null,
                 budgetSnapshot.isEmpty() ? null : budgetSnapshot,
+                credentials.isEmpty() ? null : credentials,
                 now,
                 traceId);
         send(Message.Type.JOB_ACCEPTED, accepted, sessionId, traceId, jobId, null);
@@ -431,20 +468,26 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     }
 
     private void terminateExpiredJob(JobRecord record) {
-        if (record.transitionTo(JobRecord.Status.ERROR)) {
+        if (record.transitionTo(JobRecord.Status.TIMED_OUT)) {
             var w = record.worker();
             if (w != null) {
                 w.cancel(true);
             }
-            emitJobError(record, JobError.ERROR, ErrorCode.LEASE_EXPIRED,
+            emitJobError(record, JobError.TIMED_OUT, ErrorCode.LEASE_EXPIRED,
                     "lease expired at " + record.constraints().expiresAt());
+            credentialBinding.revokeAll(record);
         }
     }
 
     private void runJob(JobRecord record, Agent agent, JobSubmit submit) {
         record.transitionTo(JobRecord.Status.RUNNING);
         JobInput input = new JobInput(
-                submit.input(), record.jobId(), sessionId, record.traceId(), record.lease());
+                submit.input(),
+                record.jobId(),
+                sessionId,
+                record.traceId(),
+                record.lease(),
+                wireCredentials(record));
         LeaseGuard guard = new LeaseGuard(record.lease(), record.constraints(), runtime.clock());
 
         JobContext ctx = new JobContext() {
@@ -478,15 +521,47 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                 guard.authorize(namespace, pattern);
                 record.budget().ensureAllPositive();
             }
+
+            @Override
+            public List<Credential> credentials() {
+                return wireCredentials(record);
+            }
+
+            @Override
+            public void rotateCredential(CredentialId id, String newValue) {
+                IssuedCredential current = record.credentials().stream()
+                        .filter(issued -> issued.wire().id().equals(id))
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "unknown credential id: " + id));
+                IssuedCredential reissued = runtime.credentialProvisioner()
+                        .issue(record.lease(), record.constraints(), this)
+                        .join()
+                        .stream()
+                        .findFirst()
+                        .orElse(current);
+                Credential wire = reissued.wire();
+                IssuedCredential next = new IssuedCredential(
+                        new Credential(
+                                wire.id(),
+                                wire.scheme(),
+                                newValue,
+                                wire.endpoint(),
+                                wire.profile(),
+                                wire.constraints()),
+                        reissued.providerHandle());
+                credentialBinding.rotate(record, id, next);
+            }
         };
 
         try {
             JobOutcome outcome = agent.run(input, ctx);
             if (record.status() == JobRecord.Status.CANCELLED) {
                 emitJobError(record, JobError.CANCELLED, ErrorCode.CANCELLED, "cancelled");
+                credentialBinding.revokeAll(record);
                 return;
             }
-            if (record.status() == JobRecord.Status.ERROR) {
+            if (record.status().terminal()) {
                 return;
             }
             switch (outcome) {
@@ -496,10 +571,12 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                             JobResult.SUCCESS, s.resultId(), s.resultSize(),
                             s.inline(), s.summary());
                     sendJobMessage(record, Message.Type.JOB_RESULT, result, nextSeq());
+                    credentialBinding.revokeAll(record);
                 }
                 case JobOutcome.Failure f -> {
                     record.transitionTo(JobRecord.Status.ERROR);
                     emitJobError(record, JobError.ERROR, f.code(), f.message());
+                    credentialBinding.revokeAll(record);
                 }
             }
         } catch (InterruptedException e) {
@@ -508,17 +585,21 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             // record to a terminal state, do not emit a competing error.
             if (record.transitionTo(JobRecord.Status.CANCELLED)) {
                 emitJobError(record, JobError.CANCELLED, ErrorCode.CANCELLED, "interrupted");
+                credentialBinding.revokeAll(record);
             }
         } catch (dev.arcp.core.error.LeaseExpiredException e) {
             record.transitionTo(JobRecord.Status.ERROR);
             emitJobError(record, JobError.ERROR, ErrorCode.LEASE_EXPIRED, e.getMessage());
+            credentialBinding.revokeAll(record);
         } catch (dev.arcp.core.error.BudgetExhaustedException e) {
             record.transitionTo(JobRecord.Status.ERROR);
             emitJobError(record, JobError.ERROR, ErrorCode.BUDGET_EXHAUSTED, e.getMessage());
+            credentialBinding.revokeAll(record);
         } catch (Exception e) {
             record.transitionTo(JobRecord.Status.ERROR);
             emitJobError(record, JobError.ERROR, ErrorCode.INTERNAL_ERROR,
                     e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            credentialBinding.revokeAll(record);
         } finally {
             ScheduledFuture<?> w = record.expiryWatchdog();
             if (w != null) {
@@ -546,7 +627,54 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             }
             emitJobError(rec, JobError.CANCELLED, ErrorCode.CANCELLED,
                     cancel.reason() != null ? cancel.reason() : "cancelled");
+            credentialBinding.revokeAll(rec);
         }
+    }
+
+    private JobContext issueContext(JobRecord record) {
+        LeaseGuard guard = new LeaseGuard(record.lease(), record.constraints(), runtime.clock());
+        return new JobContext() {
+            @Override
+            public void emit(EventBody body) {
+                emitJobEvent(record, body);
+            }
+
+            @Override
+            public boolean cancelled() {
+                return record.status().terminal() || phase == Phase.CLOSED;
+            }
+
+            @Override
+            public void authorize(String namespace, String pattern)
+                    throws dev.arcp.core.error.PermissionDeniedException,
+                            dev.arcp.core.error.LeaseExpiredException,
+                            dev.arcp.core.error.BudgetExhaustedException {
+                guard.authorize(namespace, pattern);
+                record.budget().ensureAllPositive();
+            }
+
+            @Override
+            public List<Credential> credentials() {
+                return wireCredentials(record);
+            }
+        };
+    }
+
+    private static List<Credential> wireCredentials(JobRecord record) {
+        return record.credentials().stream().map(IssuedCredential::wire).toList();
+    }
+
+    private static @Nullable List<Credential> nullableWireCredentials(JobRecord record) {
+        List<Credential> credentials = wireCredentials(record);
+        return credentials.isEmpty() ? null : credentials;
+    }
+
+    private static Throwable rootCause(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        return root;
     }
 
     private void handleSubscribe(JobSubscribe sub) {

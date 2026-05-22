@@ -21,6 +21,7 @@ include(
     ":examples:lease-expires-at",
     ":examples:idempotent-retry",
     ":examples:custom-auth",
+    ":examples:provisioned-credentials",
 )
 
 dependencyResolutionManagement {

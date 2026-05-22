@@ -81,6 +81,10 @@ works" is decomposed into multiple binary rows.
 | §9.6 `BigDecimal` arithmetic via Jackson `USE_BIG_DECIMAL_FOR_FLOATS` | Implemented | [ArcpMapper.create](arcp-core/src/main/java/dev/arcp/core/wire/ArcpMapper.java) |
 | §9.6 Negative metric values rejected | Implemented | [BudgetCounters.decrement](arcp-runtime/src/main/java/dev/arcp/runtime/lease/BudgetCounters.java) returns without decrementing |
 | §9.6 `BUDGET_EXHAUSTED` surfaced before authorize-bearing op | Implemented | [JobContext.authorize](arcp-runtime/src/main/java/dev/arcp/runtime/agent/JobContext.java) + `BudgetCounters.ensureAllPositive` |
+| §9.7 `model.use` enforcement | Implemented | [LeaseGuard.authorizeModel](arcp-runtime/src/main/java/dev/arcp/runtime/lease/LeaseGuard.java) delegates to generic lease authorization |
+| §9.7 `model.use` lease subsetting | Implemented | [Lease.contains](arcp-core/src/main/java/dev/arcp/core/lease/Lease.java) covers narrowed model patterns |
+| §9.8 provisioned credentials wire shape | Implemented | [Credential.java](arcp-core/src/main/java/dev/arcp/core/credentials/Credential.java) + [JobAccepted.java](arcp-core/src/main/java/dev/arcp/core/messages/JobAccepted.java) |
+| §9.8 credential lifecycle (issue/revoke/rotate) | Implemented | [CredentialProvisioner.java](arcp-runtime/src/main/java/dev/arcp/runtime/credentials/CredentialProvisioner.java) + [CredentialBinding.java](arcp-runtime/src/main/java/dev/arcp/runtime/credentials/CredentialBinding.java) |
 
 ## §10. Delegation
 
@@ -118,6 +122,7 @@ works" is decomposed into multiple binary rows.
 | lease-expires-at | Implemented | [examples/lease-expires-at/](examples/lease-expires-at/) |
 | idempotent-retry | Implemented | [examples/idempotent-retry/](examples/idempotent-retry/) |
 | custom-auth | Implemented | [examples/custom-auth/](examples/custom-auth/) |
+| provisioned-credentials | Implemented | [examples/provisioned-credentials/](examples/provisioned-credentials/) |
 
 ## §14. Security Considerations
 
@@ -126,6 +131,8 @@ works" is decomposed into multiple binary rows.
 | §14 Subscribe scope (no cross-principal leak) | Implemented | [SessionLoop.handleSubscribe](arcp-runtime/src/main/java/dev/arcp/runtime/session/SessionLoop.java) |
 | §14 Budget bypass protection | Implemented | [BudgetCounters.ensureAllPositive](arcp-runtime/src/main/java/dev/arcp/runtime/lease/BudgetCounters.java) gates every authorize call |
 | §14 Lease clock check (no past `expires_at`) | Implemented | [LeaseGuard.authorize](arcp-runtime/src/main/java/dev/arcp/runtime/lease/LeaseGuard.java) |
+| §14 Credential confidentiality | Implemented | [Credential.toString](arcp-core/src/main/java/dev/arcp/core/credentials/Credential.java) redacts `value`; [JobSummary](arcp-core/src/main/java/dev/arcp/core/messages/JobSummary.java) omits credentials |
+| §14 Credential revocation reliability | Implemented | [FileCredentialRevocationStore](arcp-runtime/src/main/java/dev/arcp/runtime/credentials/FileCredentialRevocationStore.java) records outstanding IDs; [ArcpRuntime.Builder](arcp-runtime/src/main/java/dev/arcp/runtime/ArcpRuntime.java) requires a configured revocation store when advertising credentials |
 | §14 Host-header / Origin allowlist on WS upgrade | Implemented | [ArcpJakartaAdapter](arcp-middleware-jakarta/src/main/java/dev/arcp/middleware/jakarta/ArcpJakartaAdapter.java) Builder.allowedHosts / allowedOrigins; [ArcpVertxHandler](arcp-middleware-vertx/src/main/java/dev/arcp/middleware/vertx/ArcpVertxHandler.java) Builder.allowedHosts; Spring adapter at the [ArcpSpringBootProperties](arcp-middleware-spring-boot/src/main/java/dev/arcp/middleware/spring/ArcpSpringBootProperties.java) level |
 
 ## Out-of-scope for 1.0.0

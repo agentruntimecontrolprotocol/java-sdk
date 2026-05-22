@@ -12,6 +12,8 @@ public enum Feature {
     SUBSCRIBE("subscribe"),
     LEASE_EXPIRES_AT("lease_expires_at"),
     COST_BUDGET("cost.budget"),
+    MODEL_USE("model.use"),
+    PROVISIONED_CREDENTIALS("provisioned_credentials"),
     PROGRESS("progress"),
     RESULT_CHUNK("result_chunk"),
     AGENT_VERSIONS("agent_versions");
