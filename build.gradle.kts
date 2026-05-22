@@ -1,3 +1,7 @@
+plugins {
+    id("com.diffplug.spotless") version "6.25.0" apply false
+}
+
 allprojects {
     group = "dev.arcp"
     version = "1.0.0-SNAPSHOT"
@@ -36,6 +40,13 @@ subprojects {
                 addStringOption("Xdoclint:none", "-quiet")
                 encoding = "UTF-8"
                 charSet = "UTF-8"
+            }
+        }
+        apply(plugin = "com.diffplug.spotless")
+        configure<com.diffplug.gradle.spotless.SpotlessExtension> {
+            java {
+                googleJavaFormat()
+                removeUnusedImports()
             }
         }
     }

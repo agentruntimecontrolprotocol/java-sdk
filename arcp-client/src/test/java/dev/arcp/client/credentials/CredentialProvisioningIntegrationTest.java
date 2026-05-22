@@ -1,4 +1,4 @@
-package dev.arcp.runtime.credentials;
+package dev.arcp.client.credentials;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -20,6 +20,9 @@ import dev.arcp.core.messages.JobResult;
 import dev.arcp.core.transport.MemoryTransport;
 import dev.arcp.runtime.ArcpRuntime;
 import dev.arcp.runtime.agent.JobOutcome;
+import dev.arcp.runtime.credentials.CredentialProvisioner;
+import dev.arcp.runtime.credentials.InMemoryCredentialRevocationStore;
+import dev.arcp.runtime.credentials.IssuedCredential;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;

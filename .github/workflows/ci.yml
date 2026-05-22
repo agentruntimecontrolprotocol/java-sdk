@@ -52,10 +52,13 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Check formatting (Spotless)
+        run: ./gradlew spotlessCheck --no-daemon
+
       - name: Build
         run: ./gradlew build --no-daemon --stacktrace
 
-      - name: Run all 10 examples
+      - name: Run all runnable examples and recipes
         run: |
           ./gradlew --no-daemon --stacktrace \
             :examples:submit-and-stream:run \
@@ -67,7 +70,23 @@ jobs:
             :examples:list-jobs:run \
             :examples:lease-expires-at:run \
             :examples:idempotent-retry:run \
-            :examples:custom-auth:run
+            :examples:custom-auth:run \
+            :examples:provisioned-credentials:run \
+            :examples:ack-backpressure:run \
+            :examples:delegate:run \
+            :examples:spring-boot:run \
+            :examples:jakarta:run \
+            :examples:lease-violation:run \
+            :examples:progress:run \
+            :examples:resume:run \
+            :examples:stdio:run \
+            :examples:subscribe:run \
+            :examples:tracing:run \
+            :examples:vendor-extensions:run \
+            :recipes:email-vendor-leases:run \
+            :recipes:mcp-skill:run \
+            :recipes:multi-agent-budget:run \
+            :recipes:stream-resume:run
 
       - name: Upload test reports
         if: always()

@@ -22,6 +22,21 @@ include(
     ":examples:idempotent-retry",
     ":examples:custom-auth",
     ":examples:provisioned-credentials",
+    ":examples:ack-backpressure",
+    ":examples:delegate",
+    ":examples:spring-boot",
+    ":examples:jakarta",
+    ":examples:lease-violation",
+    ":examples:progress",
+    ":examples:resume",
+    ":examples:stdio",
+    ":examples:subscribe",
+    ":examples:tracing",
+    ":examples:vendor-extensions",
+    ":recipes:email-vendor-leases",
+    ":recipes:mcp-skill",
+    ":recipes:multi-agent-budget",
+    ":recipes:stream-resume",
 )
 
 dependencyResolutionManagement {

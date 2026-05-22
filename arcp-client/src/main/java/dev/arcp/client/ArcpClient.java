@@ -94,6 +94,8 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     private volatile @Nullable SessionId sessionId;
     private volatile @Nullable Session session;
     private volatile boolean closed;
+    private final @Nullable String resumeToken;
+    private final @Nullable Long lastEventSeq;
 
     private ArcpClient(Builder b) {
         this.transport = Objects.requireNonNull(b.transport, "transport");
@@ -106,6 +108,8 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
         this.scheduler = b.scheduler != null ? b.scheduler
                 : Executors.newScheduledThreadPool(1, r -> Thread.ofPlatform()
                         .name("arcp-client-scheduler", 0).daemon(true).unstarted(r));
+        this.resumeToken = b.resumeToken;
+        this.lastEventSeq = b.lastEventSeq;
     }
 
     public static Builder builder(Transport transport) {
@@ -116,7 +120,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     public CompletableFuture<Session> connect() {
         transport.incoming().subscribe(this);
         SessionHello hello = new SessionHello(
-                info, auth, Capabilities.of(requestedFeatures), null, null);
+                info, auth, Capabilities.of(requestedFeatures), resumeToken, lastEventSeq);
         send(Message.Type.SESSION_HELLO, hello, null, null, null, null);
         return sessionFuture;
     }
@@ -202,6 +206,20 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
             // best-effort close
         }
         scheduler.shutdownNow();
+    }
+
+    /** Returns the highest event sequence number seen from the server, or -1 if none. */
+    public long lastSeenSeq() {
+        return lastSeenSeq.get();
+    }
+
+    /** Returns the active session after {@link #connect()} completes. */
+    public Session session() {
+        Session current = session;
+        if (current == null) {
+            throw new IllegalStateException("client is not connected");
+        }
+        return current;
     }
 
     @Override
@@ -481,6 +499,8 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
         private boolean autoAck = true;
         private Duration ackInterval = Duration.ofMillis(200);
         private @Nullable ScheduledExecutorService scheduler;
+        private @Nullable String resumeToken;
+        private @Nullable Long lastEventSeq;
 
         Builder(Transport transport) {
             this.transport = transport;
@@ -523,6 +543,21 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
 
         public Builder scheduler(ScheduledExecutorService s) {
             this.scheduler = s;
+            return this;
+        }
+
+        /** Resume a prior session by supplying the token received in {@link Session#resumeToken()}. */
+        public Builder resumeToken(String token) {
+            this.resumeToken = token;
+            return this;
+        }
+
+        /**
+         * Resume from a known event sequence number (§6.3). Used together with
+         * {@link #resumeToken(String)} to re-subscribe to events the client may have missed.
+         */
+        public Builder lastEventSeq(long seq) {
+            this.lastEventSeq = seq;
             return this;
         }
 
