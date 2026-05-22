@@ -1,5 +1,5 @@
 ---
-title: "Quickstart"
+title: "Getting started"
 sdk: java
 spec_sections: ["6.1", "6.2", "7.1"]
 order: 1
@@ -7,13 +7,13 @@ kind: quickstart
 since: "1.0.0"
 ---
 
-# Quickstart
+# Getting started
 
 ## Prerequisites
 
-- JDK 21+. Set `JAVA_HOME` to a JDK 21 installation; the Gradle wrapper does
-  the rest.
-- Gradle 8.x via the bundled wrapper (`./gradlew`).
+- **JDK 21+.** Set `JAVA_HOME` to a JDK 21 installation; the Gradle wrapper
+  (`./gradlew`) picks it up automatically.
+- **Gradle 8.x** via the bundled wrapper — no separate installation needed.
 
 ## Add the dependency
 
@@ -21,9 +21,18 @@ since: "1.0.0"
 
 ```kotlin
 dependencies {
-    implementation("dev.arcp:arcp:1.0.0")
+    implementation("dev.arcp:arcp:1.0.0")             // umbrella (client + runtime)
     runtimeOnly("ch.qos.logback:logback-classic:1.5.12")   // any SLF4J binding
 }
+```
+
+Use granular artifacts if you only need one side:
+
+```kotlin
+implementation("dev.arcp:arcp-client:1.0.0")          // client only
+implementation("dev.arcp:arcp-runtime:1.0.0")         // runtime only
+implementation("dev.arcp:arcp-runtime-jetty:1.0.0")   // Jetty WebSocket server
+implementation("dev.arcp:arcp-otel:1.0.0")            // OpenTelemetry tracing
 ```
 
 ### Maven
@@ -38,8 +47,8 @@ dependencies {
 
 ## In-process round trip
 
-The smallest working example: a runtime that hosts one `echo` agent, paired
-with a client over an in-memory transport.
+The smallest working example: a runtime hosting one `echo` agent, paired with
+a client over an in-memory transport.
 
 ```java
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -71,9 +80,12 @@ public class Quickstart {
 }
 ```
 
+`MemoryTransport.pair()` returns two endpoints of a single in-process channel —
+no network required. This pattern is ideal for unit tests and CI smoke checks.
+
 ## Over WebSocket
 
-Swap the transport: embed Jetty on the runtime side, JDK
+Swap the transport: embed Jetty on the runtime side, use JDK
 `HttpClient.WebSocket` on the client side.
 
 ```java
@@ -91,18 +103,38 @@ try (ArcpJettyServer server = ArcpJettyServer.builder(runtime).build().start()) 
 
 `server.uri()` returns the bound `ws://127.0.0.1:<port>/arcp` address.
 
+## Over stdio (parent–child process)
+
+For subprocess deployments where the agent owns its `stdin` / `stdout`:
+
+```java
+import dev.arcp.core.transport.StdioTransport;
+
+// Runtime side (subprocess):
+StdioTransport runtimeTransport = StdioTransport.server(System.in, System.out);
+runtime.accept(runtimeTransport);
+
+// Client side (parent process, connected via pipes):
+StdioTransport clientTransport = StdioTransport.client(processIn, processOut);
+try (ArcpClient client = ArcpClient.builder(clientTransport).build()) { … }
+```
+
+Both ends use newline-delimited JSON frames (§4.2).
+
 ## Bearer auth
 
-By default the runtime accepts any non-empty bearer token; the client sends
-an anonymous handshake. Production deployments wire a `BearerVerifier`:
+By default the runtime accepts any non-empty bearer token. Production
+deployments wire a `BearerVerifier`:
 
 ```java
 ArcpRuntime runtime = ArcpRuntime.builder()
     .verifier(BearerVerifier.staticToken("hunter2", new Principal("alice")))
-    .agent(...)
+    .agent("echo", "1.0.0", (input, ctx) -> JobOutcome.Success.inline(input.payload()))
     .build();
 
-ArcpClient client = ArcpClient.builder(transport).bearer("hunter2").build();
+ArcpClient client = ArcpClient.builder(transport)
+    .bearer("hunter2")
+    .build();
 ```
 
 A custom HMAC verifier example lives in
@@ -110,7 +142,8 @@ A custom HMAC verifier example lives in
 
 ## Next reads
 
-- [02-concepts.md](02-concepts.md) — envelope, sessions, jobs, leases, errors
-- [03-features/](03-features/) — one short doc per feature
-- [04-examples/](../examples/) — ten runnable example subprojects
-- [CONFORMANCE.md](../CONFORMANCE.md) — spec-section-keyed status
+- [Architecture](architecture.md) — envelope, sessions, jobs, leases, errors
+- [Transports](transports.md) — WebSocket, Jetty, Spring Boot, Jakarta, Vert.x, stdio
+- [Guides](README.md#guides) — one guide per feature area
+- [Examples](../examples/) — runnable subprojects covering every feature
+- [CONFORMANCE.md](../CONFORMANCE.md) — spec §-keyed implementation status
