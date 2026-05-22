@@ -113,11 +113,13 @@ subprojects {
 
             // Signing is only wired when the developer has supplied a PGP key.
             // Local builds and CI without credentials skip it silently.
+            // Note: GitHub Actions injects "" for unset secrets, so normalise
+            // blank strings to null before the presence check.
             extensions.configure<org.gradle.plugins.signing.SigningExtension> {
-                val signingKey = findProperty("signingKey") as String?
-                        ?: System.getenv("GPG_SIGNING_KEY")
-                val signingPassword = findProperty("signingPassword") as String?
-                        ?: System.getenv("GPG_SIGNING_PASSWORD")
+                val signingKey = (findProperty("signingKey") as String?)?.ifBlank { null }
+                        ?: System.getenv("GPG_SIGNING_KEY")?.ifBlank { null }
+                val signingPassword = (findProperty("signingPassword") as String?)?.ifBlank { null }
+                        ?: System.getenv("GPG_SIGNING_PASSWORD")?.ifBlank { null }
                 isRequired = signingKey != null && signingPassword != null
                 if (isRequired) {
                     useInMemoryPgpKeys(signingKey, signingPassword)
