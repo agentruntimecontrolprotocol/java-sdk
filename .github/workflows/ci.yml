@@ -57,7 +57,15 @@ jobs:
         run: ./gradlew spotlessCheck --no-daemon
 
       - name: Build
-        run: ./gradlew build --no-daemon --stacktrace
+        run: |
+          if [[ "${{ matrix.jdk }}" == "21" ]]; then
+            ./gradlew build --no-daemon --stacktrace
+          else
+            ./gradlew build --no-daemon --stacktrace \
+              -x spotlessCheck \
+              -x spotlessJavaCheck \
+              -x spotlessJava
+          fi
 
       - name: Run all runnable examples and recipes
         run: |
