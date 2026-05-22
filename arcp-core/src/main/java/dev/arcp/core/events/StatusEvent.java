@@ -8,23 +8,23 @@ import org.jspecify.annotations.Nullable;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record StatusEvent(String phase, @Nullable String message, @Nullable JsonNode details)
-        implements EventBody {
-    public StatusEvent(String phase, @Nullable String message) {
-        this(phase, message, null);
-    }
+    implements EventBody {
+  public StatusEvent(String phase, @Nullable String message) {
+    this(phase, message, null);
+  }
 
-    @JsonCreator
-    public StatusEvent(
-            @JsonProperty("phase") String phase,
-            @JsonProperty("message") @Nullable String message,
-            @JsonProperty("details") @Nullable JsonNode details) {
-        this.phase = phase;
-        this.message = message;
-        this.details = details;
-    }
+  @JsonCreator
+  public StatusEvent(
+      @JsonProperty("phase") String phase,
+      @JsonProperty("message") @Nullable String message,
+      @JsonProperty("details") @Nullable JsonNode details) {
+    this.phase = phase;
+    this.message = message;
+    this.details = details;
+  }
 
-    @Override
-    public Kind kind() {
-        return Kind.STATUS;
-    }
+  @Override
+  public Kind kind() {
+    return Kind.STATUS;
+  }
 }

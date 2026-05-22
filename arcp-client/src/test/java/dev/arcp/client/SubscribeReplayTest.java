@@ -18,63 +18,130 @@ import org.junit.jupiter.api.Test;
 
 class SubscribeReplayTest {
 
-    /**
-     * Submits a job whose events have already been buffered before the client
-     * subscribes; {@code history: true} must replay them through {@link
-     * ArcpClient#subscribe}.
-     */
-    @Test
-    void historyReplaysBufferedEvents() throws Exception {
-        CountDownLatch emitted = new CountDownLatch(2);
-        CountDownLatch release = new CountDownLatch(1);
-        ArcpRuntime runtime = ArcpRuntime.builder()
-                .agent("slow", "1.0.0", (input, ctx) -> {
-                    ctx.emit(new LogEvent("info", "step-1"));
-                    emitted.countDown();
-                    ctx.emit(new LogEvent("info", "step-2"));
-                    emitted.countDown();
-                    release.await();
-                    return JobOutcome.Success.inline(input.payload());
+  /**
+   * Submits a job whose events have already been buffered before the client subscribes; {@code
+   * history: true} must replay them through {@link ArcpClient#subscribe}.
+   */
+  @Test
+  void historyReplaysBufferedEvents() throws Exception {
+    CountDownLatch emitted = new CountDownLatch(2);
+    CountDownLatch release = new CountDownLatch(1);
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent(
+                "slow",
+                "1.0.0",
+                (input, ctx) -> {
+                  ctx.emit(new LogEvent("info", "step-1"));
+                  emitted.countDown();
+                  ctx.emit(new LogEvent("info", "step-2"));
+                  emitted.countDown();
+                  release.await();
+                  return JobOutcome.Success.inline(input.payload());
                 })
-                .build();
+            .build();
 
-        MemoryTransport[] pair = MemoryTransport.pair();
-        runtime.accept(pair[0]);
-        try (ArcpClient submitter = ArcpClient.builder(pair[1]).build()) {
-            submitter.connect(Duration.ofSeconds(5));
-            JobHandle handle = submitter.submit(ArcpClient.jobSubmit(
-                    "slow@1.0.0", JsonNodeFactory.instance.objectNode()));
+    MemoryTransport[] pair = MemoryTransport.pair();
+    runtime.accept(pair[0]);
+    try (ArcpClient submitter = ArcpClient.builder(pair[1]).build()) {
+      submitter.connect(Duration.ofSeconds(5));
+      JobHandle handle =
+          submitter.submit(
+              ArcpClient.jobSubmit("slow@1.0.0", JsonNodeFactory.instance.objectNode()));
 
-            // Wait for the runtime-side buffer to hold both events before we subscribe.
-            assertThat(emitted.await(3, TimeUnit.SECONDS)).isTrue();
+      // Wait for the runtime-side buffer to hold both events before we subscribe.
+      assertThat(emitted.await(3, TimeUnit.SECONDS)).isTrue();
 
-            CopyOnWriteArrayList<String> replayed = new CopyOnWriteArrayList<>();
-            submitter.subscribe(handle.jobId(), SubscribeOptions.withHistory(0L))
-                    .subscribe(new Flow.Subscriber<>() {
-                        @Override
-                        public void onSubscribe(Flow.Subscription s) {
-                            s.request(Long.MAX_VALUE);
-                        }
+      CopyOnWriteArrayList<String> replayed = new CopyOnWriteArrayList<>();
+      submitter
+          .subscribe(handle.jobId(), SubscribeOptions.withHistory(0L))
+          .subscribe(
+              new Flow.Subscriber<>() {
+                @Override
+                public void onSubscribe(Flow.Subscription s) {
+                  s.request(Long.MAX_VALUE);
+                }
 
-                        @Override
-                        public void onNext(EventBody body) {
-                            if (body instanceof LogEvent log) {
-                                replayed.add(log.message());
-                            }
-                        }
+                @Override
+                public void onNext(EventBody body) {
+                  if (body instanceof LogEvent log) {
+                    replayed.add(log.message());
+                  }
+                }
 
-                        @Override
-                        public void onError(Throwable throwable) {}
+                @Override
+                public void onError(Throwable throwable) {}
 
-                        @Override
-                        public void onComplete() {}
-                    });
+                @Override
+                public void onComplete() {}
+              });
 
-            await().atMost(Duration.ofSeconds(3))
-                    .until(() -> replayed.contains("step-1") && replayed.contains("step-2"));
-            release.countDown();
-            handle.result().get(5, TimeUnit.SECONDS);
-        }
-        runtime.close();
+      await()
+          .atMost(Duration.ofSeconds(3))
+          .until(() -> replayed.contains("step-1") && replayed.contains("step-2"));
+      release.countDown();
+      handle.result().get(5, TimeUnit.SECONDS);
     }
+    runtime.close();
+  }
+
+  @Test
+  void secondSessionCanReplayCompletedJobHistory() throws Exception {
+    MemoryTransport[] submitPair = MemoryTransport.pair();
+    MemoryTransport[] replayPair = MemoryTransport.pair();
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent(
+                "ticker",
+                "1.0.0",
+                (input, ctx) -> {
+                  ctx.emit(new LogEvent("info", "tick-1"));
+                  ctx.emit(new LogEvent("info", "tick-2"));
+                  return JobOutcome.Success.inline(input.payload());
+                })
+            .build();
+    runtime.accept(submitPair[0]);
+    runtime.accept(replayPair[0]);
+
+    JobHandle handle;
+    try (ArcpClient submitter = ArcpClient.builder(submitPair[1]).bearer("shared").build()) {
+      submitter.connect(Duration.ofSeconds(5));
+      handle =
+          submitter.submit(
+              ArcpClient.jobSubmit("ticker@1.0.0", JsonNodeFactory.instance.objectNode()));
+      handle.result().get(5, TimeUnit.SECONDS);
+    }
+
+    CopyOnWriteArrayList<String> replayed = new CopyOnWriteArrayList<>();
+    try (ArcpClient replayer = ArcpClient.builder(replayPair[1]).bearer("shared").build()) {
+      replayer.connect(Duration.ofSeconds(5));
+      replayer
+          .subscribe(handle.jobId(), SubscribeOptions.withHistory(0L))
+          .subscribe(
+              new Flow.Subscriber<>() {
+                @Override
+                public void onSubscribe(Flow.Subscription s) {
+                  s.request(Long.MAX_VALUE);
+                }
+
+                @Override
+                public void onNext(EventBody body) {
+                  if (body instanceof LogEvent log) {
+                    replayed.add(log.message());
+                  }
+                }
+
+                @Override
+                public void onError(Throwable throwable) {}
+
+                @Override
+                public void onComplete() {}
+              });
+
+      await()
+          .atMost(Duration.ofSeconds(3))
+          .until(() -> replayed.contains("tick-1") && replayed.contains("tick-2"));
+    }
+    runtime.close();
+  }
 }

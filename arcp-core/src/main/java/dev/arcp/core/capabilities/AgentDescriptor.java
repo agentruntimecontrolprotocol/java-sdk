@@ -9,17 +9,15 @@ import org.jspecify.annotations.Nullable;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AgentDescriptor(
-        String name,
-        List<String> versions,
-        @Nullable @JsonProperty("default") String defaultVersion) {
+    String name, List<String> versions, @Nullable @JsonProperty("default") String defaultVersion) {
 
-    @JsonCreator
-    public AgentDescriptor(
-            @JsonProperty("name") String name,
-            @JsonProperty("versions") @Nullable List<String> versions,
-            @JsonProperty("default") @Nullable String defaultVersion) {
-        this.name = Objects.requireNonNull(name, "name");
-        this.versions = versions == null ? List.of() : List.copyOf(versions);
-        this.defaultVersion = defaultVersion;
-    }
+  @JsonCreator
+  public AgentDescriptor(
+      @JsonProperty("name") String name,
+      @JsonProperty("versions") @Nullable List<String> versions,
+      @JsonProperty("default") @Nullable String defaultVersion) {
+    this.name = Objects.requireNonNull(name, "name");
+    this.versions = versions == null ? List.of() : List.copyOf(versions);
+    this.defaultVersion = defaultVersion;
+  }
 }

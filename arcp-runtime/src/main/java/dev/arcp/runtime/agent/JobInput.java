@@ -10,13 +10,13 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 public record JobInput(
-        JsonNode payload,
-        JobId jobId,
-        SessionId sessionId,
-        @Nullable TraceId traceId,
-        Lease lease,
-        List<Credential> credentials) {
-    public JobInput {
-        credentials = List.copyOf(credentials);
-    }
+    JsonNode payload,
+    JobId jobId,
+    SessionId sessionId,
+    @Nullable TraceId traceId,
+    Lease lease,
+    List<Credential> credentials) {
+  public JobInput {
+    credentials = List.copyOf(credentials);
+  }
 }

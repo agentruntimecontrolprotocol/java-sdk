@@ -49,7 +49,7 @@ public final class Main {
         AtomicInteger firstPassCount = new AtomicInteger();
         CompletableFuture<Void> firstPassDone = new CompletableFuture<>();
 
-        try (ArcpClient client1 = ArcpClient.builder(pair1[1]).build()) {
+        try (ArcpClient client1 = ArcpClient.builder(pair1[1]).bearer("demo").build()) {
             client1.connect(Duration.ofSeconds(5));
 
             JobHandle handle =
@@ -101,7 +101,7 @@ public final class Main {
         AtomicInteger replayCount = new AtomicInteger();
         CompletableFuture<Void> replayDone = new CompletableFuture<>();
 
-        ArcpClient.Builder builder2 = ArcpClient.builder(pair2[1]);
+        ArcpClient.Builder builder2 = ArcpClient.builder(pair2[1]).bearer("demo");
         if (resumeToken != null) {
             builder2 = builder2.resumeToken(resumeToken).lastEventSeq(lastSeq);
         }

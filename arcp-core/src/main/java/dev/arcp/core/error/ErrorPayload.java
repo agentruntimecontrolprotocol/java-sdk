@@ -9,27 +9,24 @@ import org.jspecify.annotations.Nullable;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ErrorPayload(
-        ErrorCode code,
-        String message,
-        boolean retryable,
-        @Nullable JsonNode details) {
+    ErrorCode code, String message, boolean retryable, @Nullable JsonNode details) {
 
-    public ErrorPayload {
-        Objects.requireNonNull(code, "code");
-        Objects.requireNonNull(message, "message");
-    }
+  public ErrorPayload {
+    Objects.requireNonNull(code, "code");
+    Objects.requireNonNull(message, "message");
+  }
 
-    @JsonCreator
-    static ErrorPayload from(
-            @JsonProperty("code") ErrorCode code,
-            @JsonProperty("message") String message,
-            @JsonProperty("retryable") @Nullable Boolean retryable,
-            @JsonProperty("details") @Nullable JsonNode details) {
-        return new ErrorPayload(
-                code, message, retryable != null ? retryable : code.retryable(), details);
-    }
+  @JsonCreator
+  static ErrorPayload from(
+      @JsonProperty("code") ErrorCode code,
+      @JsonProperty("message") String message,
+      @JsonProperty("retryable") @Nullable Boolean retryable,
+      @JsonProperty("details") @Nullable JsonNode details) {
+    return new ErrorPayload(
+        code, message, retryable != null ? retryable : code.retryable(), details);
+  }
 
-    public static ErrorPayload of(ErrorCode code, String message) {
-        return new ErrorPayload(code, message, code.retryable(), null);
-    }
+  public static ErrorPayload of(ErrorCode code, String message) {
+    return new ErrorPayload(code, message, code.retryable(), null);
+  }
 }

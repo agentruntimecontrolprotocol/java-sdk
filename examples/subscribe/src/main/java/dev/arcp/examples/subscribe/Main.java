@@ -43,7 +43,7 @@ public final class Main {
         JobId jobId;
 
         // Client A: submit the job and wait for it to complete.
-        try (ArcpClient clientA = ArcpClient.builder(pair1[1]).build()) {
+        try (ArcpClient clientA = ArcpClient.builder(pair1[1]).bearer("demo").build()) {
             clientA.connect(Duration.ofSeconds(5));
             JobHandle handle =
                     clientA.submit(
@@ -57,7 +57,7 @@ public final class Main {
         AtomicInteger replayCount = new AtomicInteger();
         CompletableFuture<Void> allReplayed = new CompletableFuture<>();
 
-        try (ArcpClient clientB = ArcpClient.builder(pair2[1]).build()) {
+        try (ArcpClient clientB = ArcpClient.builder(pair2[1]).bearer("demo").build()) {
             clientB.connect(Duration.ofSeconds(5));
 
             Flow.Publisher<EventBody> events =

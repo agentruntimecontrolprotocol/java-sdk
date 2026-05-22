@@ -4,11 +4,11 @@ import dev.arcp.core.credentials.CredentialId;
 import java.util.List;
 
 public interface CredentialRevocationStore {
-    void record(CredentialId id, String providerHandle);
+  void record(CredentialId id, String providerHandle);
 
-    void markRevoked(CredentialId id);
+  void markRevoked(CredentialId id);
 
-    List<Outstanding> outstanding();
+  List<Outstanding> outstanding();
 
-    record Outstanding(CredentialId id, String providerHandle) {}
+  record Outstanding(CredentialId id, String providerHandle) {}
 }

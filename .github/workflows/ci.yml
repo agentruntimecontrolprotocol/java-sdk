@@ -53,6 +53,7 @@ jobs:
         uses: gradle/actions/wrapper-validation@v4
 
       - name: Check formatting (Spotless)
+        if: ${{ matrix.jdk == '21' }}
         run: ./gradlew spotlessCheck --no-daemon
 
       - name: Build

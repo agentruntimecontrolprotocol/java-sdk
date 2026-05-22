@@ -9,8 +9,8 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 public record Session(
-        SessionId sessionId,
-        Set<Feature> negotiatedFeatures,
-        @Nullable String resumeToken,
-        @Nullable Duration heartbeatInterval,
-        List<AgentDescriptor> availableAgents) {}
+    SessionId sessionId,
+    Set<Feature> negotiatedFeatures,
+    @Nullable String resumeToken,
+    @Nullable Duration heartbeatInterval,
+    List<AgentDescriptor> availableAgents) {}

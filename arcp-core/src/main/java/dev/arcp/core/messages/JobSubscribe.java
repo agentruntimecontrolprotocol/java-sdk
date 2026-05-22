@@ -8,23 +8,23 @@ import org.jspecify.annotations.Nullable;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record JobSubscribe(
-        @JsonProperty("job_id") JobId jobId,
-        @JsonProperty("from_event_seq") @Nullable Long fromEventSeq,
-        @Nullable Boolean history)
-        implements Message {
+    @JsonProperty("job_id") JobId jobId,
+    @JsonProperty("from_event_seq") @Nullable Long fromEventSeq,
+    @Nullable Boolean history)
+    implements Message {
 
-    @JsonCreator
-    public JobSubscribe(
-            @JsonProperty("job_id") JobId jobId,
-            @JsonProperty("from_event_seq") @Nullable Long fromEventSeq,
-            @JsonProperty("history") @Nullable Boolean history) {
-        this.jobId = jobId;
-        this.fromEventSeq = fromEventSeq;
-        this.history = history;
-    }
+  @JsonCreator
+  public JobSubscribe(
+      @JsonProperty("job_id") JobId jobId,
+      @JsonProperty("from_event_seq") @Nullable Long fromEventSeq,
+      @JsonProperty("history") @Nullable Boolean history) {
+    this.jobId = jobId;
+    this.fromEventSeq = fromEventSeq;
+    this.history = history;
+  }
 
-    @Override
-    public Type kind() {
-        return Type.JOB_SUBSCRIBE;
-    }
+  @Override
+  public Type kind() {
+    return Type.JOB_SUBSCRIBE;
+  }
 }

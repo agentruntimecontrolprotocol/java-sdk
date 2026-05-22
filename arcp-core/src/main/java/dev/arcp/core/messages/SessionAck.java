@@ -4,12 +4,12 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record SessionAck(@JsonProperty("last_processed_seq") long lastProcessedSeq)
-        implements Message {
-    @JsonCreator
-    public SessionAck {}
+    implements Message {
+  @JsonCreator
+  public SessionAck {}
 
-    @Override
-    public Type kind() {
-        return Type.SESSION_ACK;
-    }
+  @Override
+  public Type kind() {
+    return Type.SESSION_ACK;
+  }
 }

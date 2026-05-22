@@ -9,29 +9,29 @@ import org.jspecify.annotations.Nullable;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record SessionWelcome(
-        RuntimeInfo runtime,
-        @JsonProperty("resume_token") @Nullable String resumeToken,
-        @JsonProperty("resume_window_sec") @Nullable Integer resumeWindowSec,
-        @JsonProperty("heartbeat_interval_sec") @Nullable Integer heartbeatIntervalSec,
-        Capabilities capabilities)
-        implements Message {
+    RuntimeInfo runtime,
+    @JsonProperty("resume_token") @Nullable String resumeToken,
+    @JsonProperty("resume_window_sec") @Nullable Integer resumeWindowSec,
+    @JsonProperty("heartbeat_interval_sec") @Nullable Integer heartbeatIntervalSec,
+    Capabilities capabilities)
+    implements Message {
 
-    @JsonCreator
-    public SessionWelcome(
-            @JsonProperty("runtime") RuntimeInfo runtime,
-            @JsonProperty("resume_token") @Nullable String resumeToken,
-            @JsonProperty("resume_window_sec") @Nullable Integer resumeWindowSec,
-            @JsonProperty("heartbeat_interval_sec") @Nullable Integer heartbeatIntervalSec,
-            @JsonProperty("capabilities") Capabilities capabilities) {
-        this.runtime = Objects.requireNonNull(runtime, "runtime");
-        this.resumeToken = resumeToken;
-        this.resumeWindowSec = resumeWindowSec;
-        this.heartbeatIntervalSec = heartbeatIntervalSec;
-        this.capabilities = Objects.requireNonNull(capabilities, "capabilities");
-    }
+  @JsonCreator
+  public SessionWelcome(
+      @JsonProperty("runtime") RuntimeInfo runtime,
+      @JsonProperty("resume_token") @Nullable String resumeToken,
+      @JsonProperty("resume_window_sec") @Nullable Integer resumeWindowSec,
+      @JsonProperty("heartbeat_interval_sec") @Nullable Integer heartbeatIntervalSec,
+      @JsonProperty("capabilities") Capabilities capabilities) {
+    this.runtime = Objects.requireNonNull(runtime, "runtime");
+    this.resumeToken = resumeToken;
+    this.resumeWindowSec = resumeWindowSec;
+    this.heartbeatIntervalSec = heartbeatIntervalSec;
+    this.capabilities = Objects.requireNonNull(capabilities, "capabilities");
+  }
 
-    @Override
-    public Type kind() {
-        return Type.SESSION_WELCOME;
-    }
+  @Override
+  public Type kind() {
+    return Type.SESSION_WELCOME;
+  }
 }

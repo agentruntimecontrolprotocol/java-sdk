@@ -15,63 +15,62 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Bridges a Jakarta WebSocket {@link Session} to the ARCP {@link Transport}
- * SPI. JSON envelopes ride as text frames per §4.1.
+ * Bridges a Jakarta WebSocket {@link Session} to the ARCP {@link Transport} SPI. JSON envelopes
+ * ride as text frames per §4.1.
  */
 final class WebSocketJsonTransport implements Transport {
 
-    private static final Logger log = LoggerFactory.getLogger(WebSocketJsonTransport.class);
+  private static final Logger log = LoggerFactory.getLogger(WebSocketJsonTransport.class);
 
-    private final Session session;
-    private final ObjectMapper mapper;
-    private final SubmissionPublisher<Envelope> inbound;
+  private final Session session;
+  private final ObjectMapper mapper;
+  private final SubmissionPublisher<Envelope> inbound;
 
-    WebSocketJsonTransport(Session session, ObjectMapper mapper) {
-        this.session = Objects.requireNonNull(session, "session");
-        this.mapper = mapper != null ? mapper : ArcpMapper.shared();
-        this.inbound = new SubmissionPublisher<>(
-                Executors.newVirtualThreadPerTaskExecutor(), 1024);
+  WebSocketJsonTransport(Session session, ObjectMapper mapper) {
+    this.session = Objects.requireNonNull(session, "session");
+    this.mapper = mapper != null ? mapper : ArcpMapper.shared();
+    this.inbound = new SubmissionPublisher<>(Executors.newVirtualThreadPerTaskExecutor(), 1024);
+  }
+
+  void deliver(String frame) {
+    try {
+      Envelope env = mapper.readValue(frame, Envelope.class);
+      inbound.submit(env);
+    } catch (IOException e) {
+      log.warn("malformed envelope frame: {}", e.getMessage());
     }
+  }
 
-    void deliver(String frame) {
-        try {
-            Envelope env = mapper.readValue(frame, Envelope.class);
-            inbound.submit(env);
-        } catch (IOException e) {
-            log.warn("malformed envelope frame: {}", e.getMessage());
-        }
-    }
+  void completeInbound() {
+    inbound.close();
+  }
 
-    void completeInbound() {
-        inbound.close();
-    }
+  void failInbound(Throwable t) {
+    inbound.closeExceptionally(t);
+  }
 
-    void failInbound(Throwable t) {
-        inbound.closeExceptionally(t);
+  @Override
+  public void send(Envelope envelope) {
+    try {
+      String json = mapper.writeValueAsString(envelope);
+      session.getBasicRemote().sendText(json);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
     }
+  }
 
-    @Override
-    public void send(Envelope envelope) {
-        try {
-            String json = mapper.writeValueAsString(envelope);
-            session.getBasicRemote().sendText(json);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
+  @Override
+  public Flow.Publisher<Envelope> incoming() {
+    return inbound;
+  }
 
-    @Override
-    public Flow.Publisher<Envelope> incoming() {
-        return inbound;
+  @Override
+  public void close() {
+    try {
+      session.close();
+    } catch (IOException ignored) {
+      // best-effort close
     }
-
-    @Override
-    public void close() {
-        try {
-            session.close();
-        } catch (IOException ignored) {
-            // best-effort close
-        }
-        inbound.close();
-    }
+    inbound.close();
+  }
 }

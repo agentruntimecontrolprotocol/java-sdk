@@ -1,12 +1,12 @@
 package dev.arcp.core.error;
 
 public abstract non-sealed class RetryableArcpException extends ArcpException {
-    protected RetryableArcpException(ErrorCode code, String message) {
-        super(code, message);
-    }
+  protected RetryableArcpException(ErrorCode code, String message) {
+    super(code, message);
+  }
 
-    @Override
-    public final boolean retryable() {
-        return true;
-    }
+  @Override
+  public final boolean retryable() {
+    return true;
+  }
 }

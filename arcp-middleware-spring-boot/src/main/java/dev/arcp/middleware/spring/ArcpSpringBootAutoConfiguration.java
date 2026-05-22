@@ -11,8 +11,8 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
 /**
- * Spring Boot auto-configuration that registers an {@link ArcpWebSocketHandler}
- * at the configured path whenever an {@link ArcpRuntime} bean is present.
+ * Spring Boot auto-configuration that registers an {@link ArcpWebSocketHandler} at the configured
+ * path whenever an {@link ArcpRuntime} bean is present.
  */
 @AutoConfiguration
 @ConditionalOnClass({EnableWebSocket.class, WebSocketConfigurer.class})
@@ -21,26 +21,25 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 @EnableWebSocket
 public class ArcpSpringBootAutoConfiguration implements WebSocketConfigurer {
 
-    private final ArcpRuntime runtime;
-    private final ArcpSpringBootProperties properties;
+  private final ArcpRuntime runtime;
+  private final ArcpSpringBootProperties properties;
 
-    public ArcpSpringBootAutoConfiguration(
-            ArcpRuntime runtime, ArcpSpringBootProperties properties) {
-        this.runtime = runtime;
-        this.properties = properties;
-    }
+  public ArcpSpringBootAutoConfiguration(ArcpRuntime runtime, ArcpSpringBootProperties properties) {
+    this.runtime = runtime;
+    this.properties = properties;
+  }
 
-    @Bean
-    public ArcpWebSocketHandler arcpWebSocketHandler() {
-        return new ArcpWebSocketHandler(runtime);
-    }
+  @Bean
+  public ArcpWebSocketHandler arcpWebSocketHandler() {
+    return new ArcpWebSocketHandler(runtime);
+  }
 
-    @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        String[] origins = properties.getAllowedOrigins().isEmpty()
-                ? new String[] {"*"}
-                : properties.getAllowedOrigins().toArray(new String[0]);
-        registry.addHandler(arcpWebSocketHandler(), properties.getPath())
-                .setAllowedOrigins(origins);
-    }
+  @Override
+  public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+    String[] origins =
+        properties.getAllowedOrigins().isEmpty()
+            ? new String[] {"*"}
+            : properties.getAllowedOrigins().toArray(new String[0]);
+    registry.addHandler(arcpWebSocketHandler(), properties.getPath()).setAllowedOrigins(origins);
+  }
 }

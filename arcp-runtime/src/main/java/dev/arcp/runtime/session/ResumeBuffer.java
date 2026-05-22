@@ -7,44 +7,38 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Bounded ring buffer of recent envelopes carrying {@code event_seq}. Supports
- * §6.3 resume by serving envelopes with {@code event_seq > last_event_seq}.
+ * Bounded ring buffer of recent envelopes carrying {@code event_seq}. Supports §6.3 resume by
+ * serving envelopes with {@code event_seq > last_event_seq}.
  */
 public final class ResumeBuffer {
 
-    private final int capacity;
-    private final Deque<Envelope> ring;
+  private final int capacity;
+  private final Deque<Envelope> ring;
 
-    public ResumeBuffer(int capacity) {
-        if (capacity <= 0) {
-            throw new IllegalArgumentException("capacity must be positive: " + capacity);
-        }
-        this.capacity = capacity;
-        this.ring = new ArrayDeque<>(capacity);
+  public ResumeBuffer(int capacity) {
+    if (capacity <= 0) {
+      throw new IllegalArgumentException("capacity must be positive: " + capacity);
     }
+    this.capacity = capacity;
+    this.ring = new ArrayDeque<>(capacity);
+  }
 
-    public synchronized void record(Envelope envelope) {
-        Objects.requireNonNull(envelope, "envelope");
-        if (envelope.eventSeq() == null) {
-            return;
-        }
-        if (ring.size() == capacity) {
-            ring.removeFirst();
-        }
-        ring.addLast(envelope);
+  public synchronized void record(Envelope envelope) {
+    Objects.requireNonNull(envelope, "envelope");
+    if (envelope.eventSeq() == null) {
+      return;
     }
+    if (ring.size() == capacity) {
+      ring.removeFirst();
+    }
+    ring.addLast(envelope);
+  }
 
-    public synchronized List<Envelope> since(long lastEventSeq) {
-        return ring.stream()
-                .filter(e -> e.eventSeq() != null && e.eventSeq() > lastEventSeq)
-                .toList();
-    }
+  public synchronized List<Envelope> since(long lastEventSeq) {
+    return ring.stream().filter(e -> e.eventSeq() != null && e.eventSeq() > lastEventSeq).toList();
+  }
 
-    public synchronized long earliestSeq() {
-        return ring.stream()
-                .map(Envelope::eventSeq)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(-1L);
-    }
+  public synchronized long earliestSeq() {
+    return ring.stream().map(Envelope::eventSeq).filter(Objects::nonNull).findFirst().orElse(-1L);
+  }
 }

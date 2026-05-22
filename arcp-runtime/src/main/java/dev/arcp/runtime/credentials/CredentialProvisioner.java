@@ -9,8 +9,8 @@ import java.util.concurrent.CompletableFuture;
 
 /** Plug-in point for upstream-specific provisioned credential issue/revoke. */
 public interface CredentialProvisioner {
-    CompletableFuture<List<IssuedCredential>> issue(
-            Lease lease, LeaseConstraints constraints, JobContext ctx);
+  CompletableFuture<List<IssuedCredential>> issue(
+      Lease lease, LeaseConstraints constraints, JobContext ctx);
 
-    CompletableFuture<Void> revoke(CredentialId id);
+  CompletableFuture<Void> revoke(CredentialId id);
 }

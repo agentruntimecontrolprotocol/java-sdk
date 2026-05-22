@@ -4,13 +4,13 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public record ThoughtEvent(String text) implements EventBody {
-    @JsonCreator
-    public ThoughtEvent(@JsonProperty("text") String text) {
-        this.text = text;
-    }
+  @JsonCreator
+  public ThoughtEvent(@JsonProperty("text") String text) {
+    this.text = text;
+  }
 
-    @Override
-    public Kind kind() {
-        return Kind.THOUGHT;
-    }
+  @Override
+  public Kind kind() {
+    return Kind.THOUGHT;
+  }
 }

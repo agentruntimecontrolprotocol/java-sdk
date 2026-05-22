@@ -10,58 +10,56 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
- * §9.6 per-currency budget counters. Reads are cheap; mutations are
- * CAS-on-{@link AtomicReference} to keep {@link BigDecimal} arithmetic exact
- * without locking.
+ * §9.6 per-currency budget counters. Reads are cheap; mutations are CAS-on-{@link AtomicReference}
+ * to keep {@link BigDecimal} arithmetic exact without locking.
  */
 public final class BudgetCounters {
 
-    private final ConcurrentHashMap<String, AtomicReference<BigDecimal>> counters =
-            new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, AtomicReference<BigDecimal>> counters =
+      new ConcurrentHashMap<>();
 
-    public BudgetCounters(Map<String, BigDecimal> initial) {
-        for (var e : initial.entrySet()) {
-            counters.put(e.getKey(), new AtomicReference<>(e.getValue()));
-        }
+  public BudgetCounters(Map<String, BigDecimal> initial) {
+    for (var e : initial.entrySet()) {
+      counters.put(e.getKey(), new AtomicReference<>(e.getValue()));
     }
+  }
 
-    public boolean tracks(String currency) {
-        return counters.containsKey(currency);
-    }
+  public boolean tracks(String currency) {
+    return counters.containsKey(currency);
+  }
 
-    public BigDecimal remaining(String currency) {
-        var ref = counters.get(currency);
-        return ref == null ? BigDecimal.ZERO : ref.get();
-    }
+  public BigDecimal remaining(String currency) {
+    var ref = counters.get(currency);
+    return ref == null ? BigDecimal.ZERO : ref.get();
+  }
 
-    public Map<String, BigDecimal> snapshot() {
-        return Collections.unmodifiableMap(counters.entrySet().stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        e -> e.getValue().get(),
-                        (a, b) -> a,
-                        LinkedHashMap::new)));
-    }
+  public Map<String, BigDecimal> snapshot() {
+    return Collections.unmodifiableMap(
+        counters.entrySet().stream()
+            .collect(
+                Collectors.toMap(
+                    Map.Entry::getKey, e -> e.getValue().get(), (a, b) -> a, LinkedHashMap::new)));
+  }
 
-    /** §9.6: negative metric values produce no decrement. */
-    public void decrement(String currency, BigDecimal amount) {
-        if (amount.signum() < 0) {
-            return;
-        }
-        var ref = counters.get(currency);
-        if (ref == null) {
-            return;
-        }
-        ref.updateAndGet(b -> b.subtract(amount));
+  /** §9.6: negative metric values produce no decrement. */
+  public void decrement(String currency, BigDecimal amount) {
+    if (amount.signum() < 0) {
+      return;
     }
+    var ref = counters.get(currency);
+    if (ref == null) {
+      return;
+    }
+    ref.updateAndGet(b -> b.subtract(amount));
+  }
 
-    /** Returns null if all budgets are positive; otherwise throws. */
-    public void ensureAllPositive() throws BudgetExhaustedException {
-        for (var e : counters.entrySet()) {
-            if (e.getValue().get().signum() <= 0) {
-                throw new BudgetExhaustedException(
-                        "budget exhausted: " + e.getKey() + " remaining " + e.getValue().get());
-            }
-        }
+  /** Returns null if all budgets are positive; otherwise throws. */
+  public void ensureAllPositive() throws BudgetExhaustedException {
+    for (var e : counters.entrySet()) {
+      if (e.getValue().get().signum() <= 0) {
+        throw new BudgetExhaustedException(
+            "budget exhausted: " + e.getKey() + " remaining " + e.getValue().get());
+      }
     }
+  }
 }

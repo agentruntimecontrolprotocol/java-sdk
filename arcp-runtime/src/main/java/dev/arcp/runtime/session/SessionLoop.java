@@ -57,7 +57,6 @@ import dev.arcp.runtime.lease.LeaseGuard;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -73,260 +72,277 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Per-transport runtime session: handshake, message dispatch, job lifecycle,
- * heartbeats, lease enforcement, idempotency, and subscribe fan-out.
+ * Per-transport runtime session: handshake, message dispatch, job lifecycle, heartbeats, lease
+ * enforcement, idempotency, and subscribe fan-out.
  */
 public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
-    private static final Logger log = LoggerFactory.getLogger(SessionLoop.class);
+  private static final Logger log = LoggerFactory.getLogger(SessionLoop.class);
 
-    public enum Phase {
-        AWAITING_HELLO,
-        ACTIVE,
-        CLOSED
+  public enum Phase {
+    AWAITING_HELLO,
+    ACTIVE,
+    CLOSED
+  }
+
+  private final ArcpRuntime runtime;
+  private final Transport transport;
+  private final ObjectMapper mapper;
+  private final AgentRegistry agents;
+  private final String pendingId = "pending:" + UUID.randomUUID();
+
+  private volatile Phase phase = Phase.AWAITING_HELLO;
+  private volatile @Nullable SessionId sessionId;
+  private volatile @Nullable Principal principal;
+  private volatile Set<Feature> negotiated = EnumSet.noneOf(Feature.class);
+  private volatile @Nullable String resumeToken;
+
+  private final AtomicLong eventSeq = new AtomicLong(0);
+  private final AtomicLong lastProcessedSeq = new AtomicLong(-1);
+  private final ResumeBuffer resumeBuffer;
+  private final HeartbeatTracker heartbeat;
+  private final CredentialBinding credentialBinding;
+  private @Nullable ScheduledFuture<?> heartbeatTick;
+
+  private final Set<JobId> ownedJobs = ConcurrentHashMap.newKeySet();
+
+  @SuppressWarnings("unused")
+  private Flow.@Nullable Subscription subscription;
+
+  public SessionLoop(ArcpRuntime runtime, Transport transport) {
+    this.runtime = runtime;
+    this.transport = transport;
+    this.mapper = runtime.mapper();
+    this.agents = runtime.agents();
+    this.resumeBuffer = new ResumeBuffer(runtime.resumeBufferCapacity());
+    this.heartbeat = new HeartbeatTracker(runtime.clock());
+    this.credentialBinding =
+        new CredentialBinding(
+            runtime.credentialProvisioner(),
+            runtime.credentialRevocationStore(),
+            runtime.clock(),
+            this::emitJobEvent);
+  }
+
+  public String idOrPending() {
+    SessionId s = sessionId;
+    return s == null ? pendingId : s.value();
+  }
+
+  public void start() {
+    transport.incoming().subscribe(this);
+  }
+
+  @Override
+  public void onSubscribe(Flow.Subscription s) {
+    this.subscription = s;
+    s.request(Long.MAX_VALUE);
+  }
+
+  @Override
+  public void onNext(Envelope envelope) {
+    heartbeat.onInbound();
+    try {
+      handle(envelope);
+    } catch (RuntimeException e) {
+      log.warn("dispatch error for {}: {}", envelope.type(), e.toString());
+    }
+  }
+
+  @Override
+  public void onError(Throwable throwable) {
+    shutdown("transport error: " + throwable.getMessage());
+  }
+
+  @Override
+  public void onComplete() {
+    shutdown("transport closed");
+  }
+
+  public void shutdown(String reason) {
+    if (phase == Phase.CLOSED) {
+      return;
+    }
+    phase = Phase.CLOSED;
+    ScheduledFuture<?> hb = heartbeatTick;
+    if (hb != null) {
+      hb.cancel(false);
+    }
+    for (JobId jobId : ownedJobs) {
+      JobRecord rec = runtime.job(jobId);
+      if (rec == null) {
+        continue;
+      }
+      if (!rec.status().terminal()) {
+        rec.transitionTo(JobRecord.Status.CANCELLED);
+        var w = rec.worker();
+        if (w != null) {
+          w.cancel(true);
+        }
+        credentialBinding.revokeAll(rec);
+        ScheduledFuture<?> watchdog = rec.expiryWatchdog();
+        if (watchdog != null) {
+          watchdog.cancel(false);
+        }
+      }
+    }
+    try {
+      transport.close();
+    } catch (RuntimeException ignored) {
+      // best-effort close
+    }
+    runtime.removeSession(this);
+  }
+
+  private void handle(Envelope envelope) {
+    Phase p = phase;
+    Message m;
+    try {
+      m = Messages.decode(mapper, envelope);
+    } catch (RuntimeException e) {
+      log.warn("rejecting malformed envelope type={}: {}", envelope.type(), e.getMessage());
+      return;
     }
 
-    private final ArcpRuntime runtime;
-    private final Transport transport;
-    private final ObjectMapper mapper;
-    private final AgentRegistry agents;
-    private final String pendingId = "pending:" + UUID.randomUUID();
-
-    private volatile Phase phase = Phase.AWAITING_HELLO;
-    private volatile @Nullable SessionId sessionId;
-    private volatile @Nullable Principal principal;
-    private volatile Set<Feature> negotiated = EnumSet.noneOf(Feature.class);
-    private volatile @Nullable String resumeToken;
-
-    private final AtomicLong eventSeq = new AtomicLong(0);
-    private final AtomicLong lastProcessedSeq = new AtomicLong(-1);
-    private final ResumeBuffer resumeBuffer;
-    private final HeartbeatTracker heartbeat;
-    private final CredentialBinding credentialBinding;
-    private @Nullable ScheduledFuture<?> heartbeatTick;
-
-    private final ConcurrentHashMap<JobId, JobRecord> jobs = new ConcurrentHashMap<>();
-
-    @SuppressWarnings("unused")
-    private Flow.@Nullable Subscription subscription;
-
-    public SessionLoop(ArcpRuntime runtime, Transport transport) {
-        this.runtime = runtime;
-        this.transport = transport;
-        this.mapper = runtime.mapper();
-        this.agents = runtime.agents();
-        this.resumeBuffer = new ResumeBuffer(runtime.resumeBufferCapacity());
-        this.heartbeat = new HeartbeatTracker(runtime.clock());
-        this.credentialBinding = new CredentialBinding(
-                runtime.credentialProvisioner(),
-                runtime.credentialRevocationStore(),
-                runtime.clock(),
-                this::emitJobEvent);
+    if (p == Phase.AWAITING_HELLO) {
+      if (m instanceof SessionHello hello) {
+        doHandshake(hello);
+      } else {
+        log.warn("dropping pre-handshake message: {}", envelope.type());
+      }
+      return;
     }
-
-    public String idOrPending() {
-        SessionId s = sessionId;
-        return s == null ? pendingId : s.value();
+    if (p == Phase.CLOSED) {
+      return;
     }
-
-    public void start() {
-        transport.incoming().subscribe(this);
+    switch (m) {
+      case SessionHello ignored -> log.warn("duplicate session.hello ignored");
+      case SessionBye bye -> handleBye(bye);
+      case SessionPing ping -> handlePing(ping);
+      case SessionPong ignored -> {
+        /* heartbeat already updated onNext */
+      }
+      case SessionAck ack -> handleAck(ack);
+      case SessionListJobs listJobs -> handleListJobs(envelope.id(), listJobs);
+      case JobSubmit submit -> handleSubmit(envelope, submit);
+      case JobCancel cancel -> handleCancel(envelope, cancel);
+      case JobSubscribe sub -> handleSubscribe(sub);
+      case JobUnsubscribe unsub -> handleUnsubscribe(unsub);
+      case SessionWelcome ignored -> log.warn("client-only message received: {}", m);
+      case JobAccepted ignored -> log.warn("client-only message received: {}", m);
+      case JobEvent ignored -> log.warn("client-only message received: {}", m);
+      case JobResult ignored -> log.warn("client-only message received: {}", m);
+      case JobError ignored -> log.warn("client-only message received: {}", m);
+      case JobSubscribed ignored -> log.warn("client-only message received: {}", m);
+      case SessionJobs ignored -> log.warn("client-only message received: {}", m);
     }
+  }
 
-    @Override
-    public void onSubscribe(Flow.Subscription s) {
-        this.subscription = s;
-        s.request(Long.MAX_VALUE);
-    }
+  private void doHandshake(SessionHello hello) {
+    try {
+      Principal pr = authenticate(hello);
+      this.principal = pr;
+      this.sessionId = SessionId.generate();
+      this.resumeToken = UUID.randomUUID().toString();
+      this.negotiated =
+          Capabilities.intersect(hello.capabilities().features(), runtime.advertised());
+      this.phase = Phase.ACTIVE;
 
-    @Override
-    public void onNext(Envelope envelope) {
+      Capabilities welcomeCaps = new Capabilities(List.of("json"), negotiated, agents.describe());
+      SessionWelcome welcome =
+          new SessionWelcome(
+              new RuntimeInfo(runtime.runtimeName(), runtime.runtimeVersion()),
+              resumeToken,
+              runtime.resumeWindowSec(),
+              negotiated.contains(Feature.HEARTBEAT) ? runtime.heartbeatIntervalSec() : null,
+              welcomeCaps);
+      send(Message.Type.SESSION_WELCOME, welcome, sessionId, null, null, null);
+      log.debug("session {} accepted for {}", sessionId, pr.id());
+
+      // §6.4: schedule heartbeat ticks if both peers negotiated heartbeat.
+      if (negotiated.contains(Feature.HEARTBEAT)) {
+        Duration interval = Duration.ofSeconds(runtime.heartbeatIntervalSec());
         heartbeat.onInbound();
-        try {
-            handle(envelope);
-        } catch (RuntimeException e) {
-            log.warn("dispatch error for {}: {}", envelope.type(), e.toString());
-        }
+        heartbeatTick =
+            runtime
+                .scheduler()
+                .scheduleAtFixedRate(
+                    () -> tickHeartbeat(interval),
+                    interval.toMillis(),
+                    interval.toMillis(),
+                    TimeUnit.MILLISECONDS);
+      }
+    } catch (RuntimeException | ArcpException e) {
+      log.info("handshake rejected: {}", e.getMessage());
+      shutdown("auth rejected");
     }
+  }
 
-    @Override
-    public void onError(Throwable throwable) {
-        shutdown("transport error: " + throwable.getMessage());
+  private Principal authenticate(SessionHello hello) throws ArcpException {
+    Auth auth = hello.auth();
+    if (Auth.BEARER.equals(auth.scheme())) {
+      String token = auth.token();
+      if (token == null) {
+        throw new dev.arcp.core.error.UnauthenticatedException("bearer token missing");
+      }
+      return runtime.verifier().verify(token);
     }
-
-    @Override
-    public void onComplete() {
-        shutdown("transport closed");
+    if (Auth.ANONYMOUS.equals(auth.scheme())) {
+      return new Principal("anon:" + UUID.randomUUID());
     }
+    throw new dev.arcp.core.error.UnauthenticatedException(
+        "unsupported auth scheme: " + auth.scheme());
+  }
 
-    public void shutdown(String reason) {
-        if (phase == Phase.CLOSED) {
-            return;
-        }
-        phase = Phase.CLOSED;
-        ScheduledFuture<?> hb = heartbeatTick;
-        if (hb != null) {
-            hb.cancel(false);
-        }
-        for (JobRecord rec : jobs.values()) {
-            if (!rec.status().terminal()) {
-                rec.transitionTo(JobRecord.Status.CANCELLED);
-                var w = rec.worker();
-                if (w != null) {
-                    w.cancel(true);
-                }
-                credentialBinding.revokeAll(rec);
-                ScheduledFuture<?> watchdog = rec.expiryWatchdog();
-                if (watchdog != null) {
-                    watchdog.cancel(false);
-                }
-            }
-        }
-        try {
-            transport.close();
-        } catch (RuntimeException ignored) {
-            // best-effort close
-        }
-        runtime.removeSession(this);
+  private void tickHeartbeat(Duration interval) {
+    if (phase != Phase.ACTIVE) {
+      return;
     }
-
-    private void handle(Envelope envelope) {
-        Phase p = phase;
-        Message m;
-        try {
-            m = Messages.decode(mapper, envelope);
-        } catch (RuntimeException e) {
-            log.warn("rejecting malformed envelope type={}: {}", envelope.type(), e.getMessage());
-            return;
-        }
-
-        if (p == Phase.AWAITING_HELLO) {
-            if (m instanceof SessionHello hello) {
-                doHandshake(hello);
-            } else {
-                log.warn("dropping pre-handshake message: {}", envelope.type());
-            }
-            return;
-        }
-        if (p == Phase.CLOSED) {
-            return;
-        }
-        switch (m) {
-            case SessionHello ignored -> log.warn("duplicate session.hello ignored");
-            case SessionBye bye -> handleBye(bye);
-            case SessionPing ping -> handlePing(ping);
-            case SessionPong ignored -> { /* heartbeat already updated onNext */ }
-            case SessionAck ack -> handleAck(ack);
-            case SessionListJobs listJobs -> handleListJobs(envelope.id(), listJobs);
-            case JobSubmit submit -> handleSubmit(envelope, submit);
-            case JobCancel cancel -> handleCancel(envelope, cancel);
-            case JobSubscribe sub -> handleSubscribe(sub);
-            case JobUnsubscribe unsub -> handleUnsubscribe(unsub);
-            case SessionWelcome ignored -> log.warn("client-only message received: {}", m);
-            case JobAccepted ignored -> log.warn("client-only message received: {}", m);
-            case JobEvent ignored -> log.warn("client-only message received: {}", m);
-            case JobResult ignored -> log.warn("client-only message received: {}", m);
-            case JobError ignored -> log.warn("client-only message received: {}", m);
-            case JobSubscribed ignored -> log.warn("client-only message received: {}", m);
-            case SessionJobs ignored -> log.warn("client-only message received: {}", m);
-        }
+    if (heartbeat.shouldClose(interval)) {
+      log.info("heartbeat lost on session {}; closing", sessionId);
+      shutdown("HEARTBEAT_LOST");
+      return;
     }
-
-    private void doHandshake(SessionHello hello) {
-        try {
-            Principal pr = authenticate(hello);
-            this.principal = pr;
-            this.sessionId = SessionId.generate();
-            this.resumeToken = UUID.randomUUID().toString();
-            this.negotiated = Capabilities.intersect(
-                    hello.capabilities().features(), runtime.advertised());
-            this.phase = Phase.ACTIVE;
-
-            Capabilities welcomeCaps = new Capabilities(
-                    List.of("json"), negotiated, agents.describe());
-            SessionWelcome welcome = new SessionWelcome(
-                    new RuntimeInfo(runtime.runtimeName(), runtime.runtimeVersion()),
-                    resumeToken,
-                    runtime.resumeWindowSec(),
-                    negotiated.contains(Feature.HEARTBEAT) ? runtime.heartbeatIntervalSec() : null,
-                    welcomeCaps);
-            send(Message.Type.SESSION_WELCOME, welcome, sessionId, null, null, null);
-            log.debug("session {} accepted for {}", sessionId, pr.id());
-
-            // §6.4: schedule heartbeat ticks if both peers negotiated heartbeat.
-            if (negotiated.contains(Feature.HEARTBEAT)) {
-                Duration interval = Duration.ofSeconds(runtime.heartbeatIntervalSec());
-                heartbeat.onInbound();
-                heartbeatTick = runtime.scheduler().scheduleAtFixedRate(
-                        () -> tickHeartbeat(interval),
-                        interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
-            }
-        } catch (RuntimeException | ArcpException e) {
-            log.info("handshake rejected: {}", e.getMessage());
-            shutdown("auth rejected");
-        }
+    if (heartbeat.shouldPing(interval)) {
+      SessionPing ping = new SessionPing("p_" + UUID.randomUUID(), runtime.clock().instant());
+      send(Message.Type.SESSION_PING, ping, sessionId, null, null, null);
     }
+  }
 
-    private Principal authenticate(SessionHello hello) throws ArcpException {
-        Auth auth = hello.auth();
-        if (Auth.BEARER.equals(auth.scheme())) {
-            String token = auth.token();
-            if (token == null) {
-                throw new dev.arcp.core.error.UnauthenticatedException("bearer token missing");
-            }
-            return runtime.verifier().verify(token);
-        }
-        if (Auth.ANONYMOUS.equals(auth.scheme())) {
-            return new Principal("anon:" + UUID.randomUUID());
-        }
-        throw new dev.arcp.core.error.UnauthenticatedException(
-                "unsupported auth scheme: " + auth.scheme());
+  private void handleBye(SessionBye bye) {
+    log.debug("session {} bye: {}", sessionId, bye.reason());
+    shutdown("client bye");
+  }
+
+  private void handlePing(SessionPing ping) {
+    SessionPong pong = new SessionPong(ping.nonce(), runtime.clock().instant());
+    send(Message.Type.SESSION_PONG, pong, sessionId, null, null, null);
+  }
+
+  private void handleAck(SessionAck ack) {
+    lastProcessedSeq.updateAndGet(prev -> Math.max(prev, ack.lastProcessedSeq()));
+  }
+
+  private void handleListJobs(MessageId requestId, SessionListJobs req) {
+    if (!negotiated.contains(Feature.LIST_JOBS)) {
+      return;
     }
-
-    private void tickHeartbeat(Duration interval) {
-        if (phase != Phase.ACTIVE) {
-            return;
-        }
-        if (heartbeat.shouldClose(interval)) {
-            log.info("heartbeat lost on session {}; closing", sessionId);
-            shutdown("HEARTBEAT_LOST");
-            return;
-        }
-        if (heartbeat.shouldPing(interval)) {
-            SessionPing ping = new SessionPing(
-                    "p_" + UUID.randomUUID(), runtime.clock().instant());
-            send(Message.Type.SESSION_PING, ping, sessionId, null, null, null);
-        }
-    }
-
-    private void handleBye(SessionBye bye) {
-        log.debug("session {} bye: {}", sessionId, bye.reason());
-        shutdown("client bye");
-    }
-
-    private void handlePing(SessionPing ping) {
-        SessionPong pong = new SessionPong(ping.nonce(), runtime.clock().instant());
-        send(Message.Type.SESSION_PONG, pong, sessionId, null, null, null);
-    }
-
-    private void handleAck(SessionAck ack) {
-        lastProcessedSeq.updateAndGet(prev -> Math.max(prev, ack.lastProcessedSeq()));
-    }
-
-    private void handleListJobs(MessageId requestId, SessionListJobs req) {
-        if (!negotiated.contains(Feature.LIST_JOBS)) {
-            return;
-        }
-        JobFilter filter = req.filter() != null ? req.filter() : JobFilter.all();
-        List<JobSummary> matching = jobs.values().stream()
-                .filter(rec -> rec.principal().equals(principal))
-                .filter(rec -> filter.status() == null || filter.status().contains(rec.status().wire()))
-                .filter(rec -> filter.agent() == null
+    JobFilter filter = req.filter() != null ? req.filter() : JobFilter.all();
+    List<JobSummary> matching =
+        runtime.jobs().stream()
+            .filter(rec -> rec.principal().equals(principal))
+            .filter(rec -> filter.status() == null || filter.status().contains(rec.status().wire()))
+            .filter(
+                rec ->
+                    filter.agent() == null
                         || filter.agent().equals(rec.resolvedAgent())
                         || filter.agent().equals(rec.resolvedAgent().split("@", 2)[0]))
-                .filter(rec -> filter.createdAfter() == null
-                        || rec.createdAt().isAfter(filter.createdAfter()))
-                .map(rec -> new JobSummary(
+            .filter(
+                rec ->
+                    filter.createdAfter() == null || rec.createdAt().isAfter(filter.createdAfter()))
+            .map(
+                rec ->
+                    new JobSummary(
                         rec.jobId(),
                         rec.resolvedAgent(),
                         rec.status().wire(),
@@ -335,469 +351,496 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                         rec.createdAt(),
                         rec.traceId(),
                         rec.lastEventSeq()))
-                .toList();
-        SessionJobs response = new SessionJobs(requestId, matching, null);
-        send(Message.Type.SESSION_JOBS, response, sessionId, null, null, null);
+            .toList();
+    SessionJobs response = new SessionJobs(requestId, matching, null);
+    send(Message.Type.SESSION_JOBS, response, sessionId, null, null, null);
+  }
+
+  private void handleSubmit(Envelope envelope, JobSubmit submit) {
+    Principal pr = principal;
+    if (pr == null) {
+      return;
+    }
+    Instant now = runtime.clock().instant();
+
+    // §9.5: expires_at, when present, must be in the future at submit.
+    if (submit.leaseConstraints() != null) {
+      Instant expires = submit.leaseConstraints().expiresAt();
+      if (expires != null && !expires.isAfter(now)) {
+        sendJobErrorTopLevel(
+            envelope, ErrorCode.INVALID_REQUEST, "expires_at must be in the future");
+        return;
+      }
     }
 
-    private void handleSubmit(Envelope envelope, JobSubmit submit) {
-        Principal pr = principal;
-        if (pr == null) {
+    // §7.2: idempotency. Identical (principal, key, payload) returns the prior job_id.
+    String idempotencyKey = submit.idempotencyKey();
+    if (idempotencyKey != null) {
+      int payloadHash = submit.input().hashCode() ^ submit.agent().wire().hashCode();
+      JobId fresh = JobId.generate();
+      var conflict = runtime.idempotency().claim(pr, idempotencyKey, payloadHash, fresh);
+      if (conflict != null) {
+        if (runtime.idempotency().matchesPayload(pr, idempotencyKey, payloadHash)) {
+          JobRecord prior = runtime.job(conflict.existing());
+          if (prior != null) {
+            emitReplayAccepted(prior, envelope.traceId());
             return;
+          }
         }
-        Instant now = runtime.clock().instant();
+        sendJobErrorTopLevel(
+            envelope,
+            ErrorCode.DUPLICATE_KEY,
+            "idempotency_key reuse with conflicting parameters: " + idempotencyKey);
+        return;
+      }
+      acceptJob(envelope, submit, pr, now, fresh);
+      return;
+    }
+    acceptJob(envelope, submit, pr, now, JobId.generate());
+  }
 
-        // §9.5: expires_at, when present, must be in the future at submit.
-        if (submit.leaseConstraints() != null) {
-            Instant expires = submit.leaseConstraints().expiresAt();
-            if (expires != null && !expires.isAfter(now)) {
-                sendJobErrorTopLevel(envelope, ErrorCode.INVALID_REQUEST,
-                        "expires_at must be in the future");
-                return;
-            }
-        }
+  private void emitReplayAccepted(JobRecord prior, @Nullable TraceId traceId) {
+    Map<String, BigDecimal> budgetSnapshot = prior.budget().snapshot();
+    JobAccepted accepted =
+        new JobAccepted(
+            prior.jobId(),
+            prior.resolvedAgent(),
+            prior.lease(),
+            prior.constraints().expiresAt() != null ? prior.constraints() : null,
+            budgetSnapshot.isEmpty() ? null : budgetSnapshot,
+            nullableWireCredentials(prior),
+            prior.createdAt(),
+            traceId);
+    send(Message.Type.JOB_ACCEPTED, accepted, sessionId, traceId, prior.jobId(), null);
+  }
 
-        // §7.2: idempotency. Identical (principal, key, payload) returns the prior job_id.
-        String idempotencyKey = submit.idempotencyKey();
-        if (idempotencyKey != null) {
-            int payloadHash = submit.input().hashCode() ^ submit.agent().wire().hashCode();
-            JobId fresh = JobId.generate();
-            var conflict = runtime.idempotency().claim(pr, idempotencyKey, payloadHash, fresh);
-            if (conflict != null) {
-                if (runtime.idempotency().matchesPayload(pr, idempotencyKey, payloadHash)) {
-                    JobRecord prior = jobs.get(conflict.existing());
-                    if (prior != null) {
-                        emitReplayAccepted(prior, envelope.traceId());
-                        return;
-                    }
-                }
-                sendJobErrorTopLevel(envelope, ErrorCode.DUPLICATE_KEY,
-                        "idempotency_key reuse with conflicting parameters: " + idempotencyKey);
-                return;
-            }
-            acceptJob(envelope, submit, pr, now, fresh);
-            return;
-        }
-        acceptJob(envelope, submit, pr, now, JobId.generate());
+  private void acceptJob(
+      Envelope envelope, JobSubmit submit, Principal pr, Instant now, JobId jobId) {
+    AgentRegistry.Resolved resolved;
+    try {
+      resolved = agents.resolve(submit.agent());
+    } catch (dev.arcp.core.error.AgentVersionNotAvailableException e) {
+      sendJobErrorTopLevel(envelope, ErrorCode.AGENT_VERSION_NOT_AVAILABLE, e.getMessage());
+      return;
+    } catch (dev.arcp.core.error.AgentNotAvailableException e) {
+      sendJobErrorTopLevel(envelope, ErrorCode.AGENT_NOT_AVAILABLE, e.getMessage());
+      return;
     }
 
-    private void emitReplayAccepted(JobRecord prior, @Nullable TraceId traceId) {
-        Map<String, BigDecimal> budgetSnapshot = prior.budget().snapshot();
-        JobAccepted accepted = new JobAccepted(
-                prior.jobId(),
-                prior.resolvedAgent(),
-                prior.lease(),
-                prior.constraints().expiresAt() != null ? prior.constraints() : null,
-                budgetSnapshot.isEmpty() ? null : budgetSnapshot,
-                nullableWireCredentials(prior),
-                prior.createdAt(),
-                traceId);
-        send(Message.Type.JOB_ACCEPTED, accepted, sessionId, traceId, prior.jobId(), null);
+    Lease lease = submit.leaseRequest() != null ? submit.leaseRequest() : Lease.empty();
+    LeaseConstraints constraints =
+        submit.leaseConstraints() != null ? submit.leaseConstraints() : LeaseConstraints.none();
+    BudgetCounters budget = new BudgetCounters(lease.budget());
+    TraceId traceId = envelope.traceId();
+    JobRecord record =
+        new JobRecord(jobId, resolved.wire(), pr, lease, constraints, budget, now, traceId);
+    runtime.registerJob(record);
+    ownedJobs.add(jobId);
+
+    List<Credential> credentials = List.of();
+    if (negotiated.contains(Feature.PROVISIONED_CREDENTIALS)) {
+      try {
+        List<IssuedCredential> issued =
+            runtime.credentialProvisioner().issue(lease, constraints, issueContext(record)).join();
+        credentials = credentialBinding.attach(record, issued);
+      } catch (RuntimeException e) {
+        ownedJobs.remove(jobId);
+        runtime.removeJob(jobId);
+        Throwable root = rootCause(e);
+        if (root instanceof UpstreamBudgetExhaustedException budgetError) {
+          sendJobErrorTopLevel(envelope, ErrorCode.BUDGET_EXHAUSTED, budgetError.getMessage());
+        } else {
+          sendJobErrorTopLevel(
+              envelope,
+              ErrorCode.INTERNAL_ERROR,
+              root.getMessage() != null ? root.getMessage() : root.getClass().getSimpleName());
+        }
+        return;
+      }
     }
 
-    private void acceptJob(
-            Envelope envelope, JobSubmit submit, Principal pr, Instant now, JobId jobId) {
-        AgentRegistry.Resolved resolved;
-        try {
-            resolved = agents.resolve(submit.agent());
-        } catch (dev.arcp.core.error.AgentVersionNotAvailableException e) {
-            sendJobErrorTopLevel(envelope, ErrorCode.AGENT_VERSION_NOT_AVAILABLE, e.getMessage());
-            return;
-        } catch (dev.arcp.core.error.AgentNotAvailableException e) {
-            sendJobErrorTopLevel(envelope, ErrorCode.AGENT_NOT_AVAILABLE, e.getMessage());
-            return;
-        }
+    Map<String, BigDecimal> budgetSnapshot = budget.snapshot();
+    JobAccepted accepted =
+        new JobAccepted(
+            jobId,
+            resolved.wire(),
+            lease,
+            constraints.expiresAt() != null ? constraints : null,
+            budgetSnapshot.isEmpty() ? null : budgetSnapshot,
+            credentials.isEmpty() ? null : credentials,
+            now,
+            traceId);
+    send(Message.Type.JOB_ACCEPTED, accepted, sessionId, traceId, jobId, null);
 
-        Lease lease = submit.leaseRequest() != null ? submit.leaseRequest() : Lease.empty();
-        LeaseConstraints constraints = submit.leaseConstraints() != null
-                ? submit.leaseConstraints() : LeaseConstraints.none();
-        BudgetCounters budget = new BudgetCounters(lease.budget());
-        TraceId traceId = envelope.traceId();
-        JobRecord record = new JobRecord(
-                jobId, resolved.wire(), pr, lease, constraints, budget, now, traceId);
-        jobs.put(jobId, record);
-
-        List<Credential> credentials = List.of();
-        if (negotiated.contains(Feature.PROVISIONED_CREDENTIALS)) {
-            try {
-                List<IssuedCredential> issued = runtime.credentialProvisioner()
-                        .issue(lease, constraints, issueContext(record))
-                        .join();
-                credentials = credentialBinding.attach(record, issued);
-            } catch (RuntimeException e) {
-                jobs.remove(jobId);
-                Throwable root = rootCause(e);
-                if (root instanceof UpstreamBudgetExhaustedException budgetError) {
-                    sendJobErrorTopLevel(envelope, ErrorCode.BUDGET_EXHAUSTED,
-                            budgetError.getMessage());
-                } else {
-                    sendJobErrorTopLevel(envelope, ErrorCode.INTERNAL_ERROR,
-                            root.getMessage() != null
-                                    ? root.getMessage()
-                                    : root.getClass().getSimpleName());
-                }
-                return;
-            }
-        }
-
-        Map<String, BigDecimal> budgetSnapshot = budget.snapshot();
-        JobAccepted accepted = new JobAccepted(
-                jobId,
-                resolved.wire(),
-                lease,
-                constraints.expiresAt() != null ? constraints : null,
-                budgetSnapshot.isEmpty() ? null : budgetSnapshot,
-                credentials.isEmpty() ? null : credentials,
-                now,
-                traceId);
-        send(Message.Type.JOB_ACCEPTED, accepted, sessionId, traceId, jobId, null);
-
-        // §9.5 watchdog: schedule a terminator if the lease has an expiry.
-        if (constraints.expiresAt() != null) {
-            long delayMillis = Duration.between(now, constraints.expiresAt()).toMillis();
-            if (delayMillis > 0) {
-                ScheduledFuture<?> watchdog = runtime.scheduler().schedule(
-                        () -> terminateExpiredJob(record),
-                        delayMillis, TimeUnit.MILLISECONDS);
-                record.setExpiryWatchdog(watchdog);
-            }
-        }
-
-        record.setWorker(runtime.workerPool().submit(
-                () -> runJob(record, resolved.agent(), submit)));
+    // §9.5 watchdog: schedule a terminator if the lease has an expiry.
+    if (constraints.expiresAt() != null) {
+      long delayMillis = Duration.between(now, constraints.expiresAt()).toMillis();
+      if (delayMillis > 0) {
+        ScheduledFuture<?> watchdog =
+            runtime
+                .scheduler()
+                .schedule(() -> terminateExpiredJob(record), delayMillis, TimeUnit.MILLISECONDS);
+        record.setExpiryWatchdog(watchdog);
+      }
     }
 
-    private void terminateExpiredJob(JobRecord record) {
-        if (record.transitionTo(JobRecord.Status.TIMED_OUT)) {
-            var w = record.worker();
-            if (w != null) {
-                w.cancel(true);
-            }
-            emitJobError(record, JobError.TIMED_OUT, ErrorCode.LEASE_EXPIRED,
-                    "lease expired at " + record.constraints().expiresAt());
-            credentialBinding.revokeAll(record);
-        }
+    record.setWorker(runtime.workerPool().submit(() -> runJob(record, resolved.agent(), submit)));
+  }
+
+  private void terminateExpiredJob(JobRecord record) {
+    if (record.transitionTo(JobRecord.Status.TIMED_OUT)) {
+      var w = record.worker();
+      if (w != null) {
+        w.cancel(true);
+      }
+      emitJobError(
+          record,
+          JobError.TIMED_OUT,
+          ErrorCode.LEASE_EXPIRED,
+          "lease expired at " + record.constraints().expiresAt());
+      credentialBinding.revokeAll(record);
     }
+  }
 
-    private void runJob(JobRecord record, Agent agent, JobSubmit submit) {
-        record.transitionTo(JobRecord.Status.RUNNING);
-        JobInput input = new JobInput(
-                submit.input(),
-                record.jobId(),
-                sessionId,
-                record.traceId(),
-                record.lease(),
-                wireCredentials(record));
-        LeaseGuard guard = new LeaseGuard(record.lease(), record.constraints(), runtime.clock());
+  private void runJob(JobRecord record, Agent agent, JobSubmit submit) {
+    record.transitionTo(JobRecord.Status.RUNNING);
+    JobInput input =
+        new JobInput(
+            submit.input(),
+            record.jobId(),
+            sessionId,
+            record.traceId(),
+            record.lease(),
+            wireCredentials(record));
+    LeaseGuard guard = new LeaseGuard(record.lease(), record.constraints(), runtime.clock());
 
-        JobContext ctx = new JobContext() {
-            @Override
-            public void emit(EventBody body) {
-                if (record.status().terminal()) {
-                    return;
-                }
-                if (body instanceof MetricEvent metric
-                        && metric.unit() != null
-                        && metric.name() != null
-                        && metric.name().startsWith("cost.")
-                        && record.budget().tracks(metric.unit())) {
-                    record.budget().decrement(metric.unit(), metric.value());
-                }
-                emitJobEvent(record, body);
-            }
-
-            @Override
-            public boolean cancelled() {
-                return Thread.currentThread().isInterrupted()
-                        || record.status() == JobRecord.Status.CANCELLED
-                        || phase == Phase.CLOSED;
-            }
-
-            @Override
-            public void authorize(String namespace, String pattern)
-                    throws dev.arcp.core.error.PermissionDeniedException,
-                            dev.arcp.core.error.LeaseExpiredException,
-                            dev.arcp.core.error.BudgetExhaustedException {
-                guard.authorize(namespace, pattern);
-                record.budget().ensureAllPositive();
-            }
-
-            @Override
-            public List<Credential> credentials() {
-                return wireCredentials(record);
-            }
-
-            @Override
-            public void rotateCredential(CredentialId id, String newValue) {
-                IssuedCredential current = record.credentials().stream()
-                        .filter(issued -> issued.wire().id().equals(id))
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalArgumentException(
-                                "unknown credential id: " + id));
-                IssuedCredential reissued = runtime.credentialProvisioner()
-                        .issue(record.lease(), record.constraints(), this)
-                        .join()
-                        .stream()
-                        .findFirst()
-                        .orElse(current);
-                Credential wire = reissued.wire();
-                IssuedCredential next = new IssuedCredential(
-                        new Credential(
-                                wire.id(),
-                                wire.scheme(),
-                                newValue,
-                                wire.endpoint(),
-                                wire.profile(),
-                                wire.constraints()),
-                        reissued.providerHandle());
-                credentialBinding.rotate(record, id, next);
-            }
-        };
-
-        try {
-            JobOutcome outcome = agent.run(input, ctx);
-            if (record.status() == JobRecord.Status.CANCELLED) {
-                emitJobError(record, JobError.CANCELLED, ErrorCode.CANCELLED, "cancelled");
-                credentialBinding.revokeAll(record);
-                return;
-            }
+    JobContext ctx =
+        new JobContext() {
+          @Override
+          public void emit(EventBody body) {
             if (record.status().terminal()) {
-                return;
+              return;
             }
-            switch (outcome) {
-                case JobOutcome.Success s -> {
-                    record.transitionTo(JobRecord.Status.SUCCESS);
-                    JobResult result = new JobResult(
-                            JobResult.SUCCESS, s.resultId(), s.resultSize(),
-                            s.inline(), s.summary());
-                    sendJobMessage(record, Message.Type.JOB_RESULT, result, nextSeq());
-                    credentialBinding.revokeAll(record);
-                }
-                case JobOutcome.Failure f -> {
-                    record.transitionTo(JobRecord.Status.ERROR);
-                    emitJobError(record, JobError.ERROR, f.code(), f.message());
-                    credentialBinding.revokeAll(record);
-                }
+            if (body instanceof MetricEvent metric
+                && metric.unit() != null
+                && metric.name() != null
+                && metric.name().startsWith("cost.")
+                && record.budget().tracks(metric.unit())) {
+              record.budget().decrement(metric.unit(), metric.value());
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            // If the watchdog or an external cancel already transitioned this
-            // record to a terminal state, do not emit a competing error.
-            if (record.transitionTo(JobRecord.Status.CANCELLED)) {
-                emitJobError(record, JobError.CANCELLED, ErrorCode.CANCELLED, "interrupted");
-                credentialBinding.revokeAll(record);
-            }
-        } catch (dev.arcp.core.error.LeaseExpiredException e) {
-            record.transitionTo(JobRecord.Status.ERROR);
-            emitJobError(record, JobError.ERROR, ErrorCode.LEASE_EXPIRED, e.getMessage());
-            credentialBinding.revokeAll(record);
-        } catch (dev.arcp.core.error.BudgetExhaustedException e) {
-            record.transitionTo(JobRecord.Status.ERROR);
-            emitJobError(record, JobError.ERROR, ErrorCode.BUDGET_EXHAUSTED, e.getMessage());
-            credentialBinding.revokeAll(record);
-        } catch (Exception e) {
-            record.transitionTo(JobRecord.Status.ERROR);
-            emitJobError(record, JobError.ERROR, ErrorCode.INTERNAL_ERROR,
-                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
-            credentialBinding.revokeAll(record);
-        } finally {
-            ScheduledFuture<?> w = record.expiryWatchdog();
-            if (w != null) {
-                w.cancel(false);
-            }
-        }
-    }
+            emitJobEvent(record, body);
+          }
 
-    private void handleCancel(Envelope envelope, JobCancel cancel) {
-        JobId jobId = envelope.jobId();
-        if (jobId == null) {
-            return;
-        }
-        JobRecord rec = jobs.get(jobId);
-        if (rec == null) {
-            return;
-        }
-        if (!rec.principal().equals(principal)) {
-            return; // §7.6: only the submitter may cancel
-        }
-        if (rec.transitionTo(JobRecord.Status.CANCELLED)) {
-            var w = rec.worker();
-            if (w != null) {
-                w.cancel(true);
-            }
-            emitJobError(rec, JobError.CANCELLED, ErrorCode.CANCELLED,
-                    cancel.reason() != null ? cancel.reason() : "cancelled");
-            credentialBinding.revokeAll(rec);
-        }
-    }
+          @Override
+          public boolean cancelled() {
+            return Thread.currentThread().isInterrupted()
+                || record.status() == JobRecord.Status.CANCELLED
+                || phase == Phase.CLOSED;
+          }
 
-    private JobContext issueContext(JobRecord record) {
-        LeaseGuard guard = new LeaseGuard(record.lease(), record.constraints(), runtime.clock());
-        return new JobContext() {
-            @Override
-            public void emit(EventBody body) {
-                emitJobEvent(record, body);
-            }
+          @Override
+          public void authorize(String namespace, String pattern)
+              throws dev.arcp.core.error.PermissionDeniedException,
+                  dev.arcp.core.error.LeaseExpiredException,
+                  dev.arcp.core.error.BudgetExhaustedException {
+            guard.authorize(namespace, pattern);
+            record.budget().ensureAllPositive();
+          }
 
-            @Override
-            public boolean cancelled() {
-                return record.status().terminal() || phase == Phase.CLOSED;
-            }
+          @Override
+          public List<Credential> credentials() {
+            return wireCredentials(record);
+          }
 
-            @Override
-            public void authorize(String namespace, String pattern)
-                    throws dev.arcp.core.error.PermissionDeniedException,
-                            dev.arcp.core.error.LeaseExpiredException,
-                            dev.arcp.core.error.BudgetExhaustedException {
-                guard.authorize(namespace, pattern);
-                record.budget().ensureAllPositive();
-            }
-
-            @Override
-            public List<Credential> credentials() {
-                return wireCredentials(record);
-            }
+          @Override
+          public void rotateCredential(CredentialId id, String newValue) {
+            IssuedCredential current =
+                record.credentials().stream()
+                    .filter(issued -> issued.wire().id().equals(id))
+                    .findFirst()
+                    .orElseThrow(
+                        () -> new IllegalArgumentException("unknown credential id: " + id));
+            IssuedCredential reissued =
+                runtime
+                    .credentialProvisioner()
+                    .issue(record.lease(), record.constraints(), this)
+                    .join()
+                    .stream()
+                    .findFirst()
+                    .orElse(current);
+            Credential wire = reissued.wire();
+            IssuedCredential next =
+                new IssuedCredential(
+                    new Credential(
+                        wire.id(),
+                        wire.scheme(),
+                        newValue,
+                        wire.endpoint(),
+                        wire.profile(),
+                        wire.constraints()),
+                    reissued.providerHandle());
+            credentialBinding.rotate(record, id, next);
+          }
         };
-    }
 
-    private static List<Credential> wireCredentials(JobRecord record) {
-        return record.credentials().stream().map(IssuedCredential::wire).toList();
-    }
-
-    private static @Nullable List<Credential> nullableWireCredentials(JobRecord record) {
-        List<Credential> credentials = wireCredentials(record);
-        return credentials.isEmpty() ? null : credentials;
-    }
-
-    private static Throwable rootCause(Throwable throwable) {
-        Throwable root = throwable;
-        while (root.getCause() != null) {
-            root = root.getCause();
+    try {
+      JobOutcome outcome = agent.run(input, ctx);
+      if (record.status() == JobRecord.Status.CANCELLED) {
+        emitJobError(record, JobError.CANCELLED, ErrorCode.CANCELLED, "cancelled");
+        credentialBinding.revokeAll(record);
+        return;
+      }
+      if (record.status().terminal()) {
+        return;
+      }
+      switch (outcome) {
+        case JobOutcome.Success s -> {
+          record.transitionTo(JobRecord.Status.SUCCESS);
+          JobResult result =
+              new JobResult(
+                  JobResult.SUCCESS, s.resultId(), s.resultSize(), s.inline(), s.summary());
+          sendJobMessage(record, Message.Type.JOB_RESULT, result, nextSeq());
+          credentialBinding.revokeAll(record);
         }
-        return root;
-    }
-
-    private void handleSubscribe(JobSubscribe sub) {
-        if (!negotiated.contains(Feature.SUBSCRIBE)) {
-            return;
+        case JobOutcome.Failure f -> {
+          record.transitionTo(JobRecord.Status.ERROR);
+          emitJobError(record, JobError.ERROR, f.code(), f.message());
+          credentialBinding.revokeAll(record);
         }
-        JobRecord rec = jobs.get(sub.jobId());
-        if (rec == null || !rec.principal().equals(principal)) {
-            sendJobErrorTopLevel(null, ErrorCode.JOB_NOT_FOUND,
-                    "job not found or not visible: " + sub.jobId());
-            return;
-        }
-        rec.subscribers().add(new JobRecord.Subscriber(this, rec.jobId()));
-        boolean wantHistory = Boolean.TRUE.equals(sub.history());
-        long subscribedFrom = sub.fromEventSeq() != null ? sub.fromEventSeq() : 0;
-        long now = eventSeq.get();
-        JobSubscribed response = new JobSubscribed(
-                rec.jobId(), rec.status().wire(), rec.resolvedAgent(), rec.lease(),
-                null, rec.traceId(), now, wantHistory);
-        send(Message.Type.JOB_SUBSCRIBED, response, sessionId, rec.traceId(), rec.jobId(), null);
-
-        if (wantHistory) {
-            for (Envelope replay : resumeBuffer.since(subscribedFrom)) {
-                JobId jid = replay.jobId();
-                if (rec.jobId().equals(jid)) {
-                    try {
-                        transport.send(replay);
-                    } catch (RuntimeException e) {
-                        log.warn("replay send failed: {}", e.toString());
-                        return;
-                    }
-                }
-            }
-        }
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      // If the watchdog or an external cancel already transitioned this
+      // record to a terminal state, do not emit a competing error.
+      if (record.transitionTo(JobRecord.Status.CANCELLED)) {
+        emitJobError(record, JobError.CANCELLED, ErrorCode.CANCELLED, "interrupted");
+        credentialBinding.revokeAll(record);
+      }
+    } catch (dev.arcp.core.error.LeaseExpiredException e) {
+      record.transitionTo(JobRecord.Status.ERROR);
+      emitJobError(record, JobError.ERROR, ErrorCode.LEASE_EXPIRED, e.getMessage());
+      credentialBinding.revokeAll(record);
+    } catch (dev.arcp.core.error.PermissionDeniedException e) {
+      record.transitionTo(JobRecord.Status.ERROR);
+      emitJobError(record, JobError.ERROR, ErrorCode.PERMISSION_DENIED, e.getMessage());
+      credentialBinding.revokeAll(record);
+    } catch (dev.arcp.core.error.BudgetExhaustedException e) {
+      record.transitionTo(JobRecord.Status.ERROR);
+      emitJobError(record, JobError.ERROR, ErrorCode.BUDGET_EXHAUSTED, e.getMessage());
+      credentialBinding.revokeAll(record);
+    } catch (Exception e) {
+      record.transitionTo(JobRecord.Status.ERROR);
+      emitJobError(
+          record,
+          JobError.ERROR,
+          ErrorCode.INTERNAL_ERROR,
+          e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+      credentialBinding.revokeAll(record);
+    } finally {
+      ScheduledFuture<?> w = record.expiryWatchdog();
+      if (w != null) {
+        w.cancel(false);
+      }
     }
+  }
 
-    private void handleUnsubscribe(JobUnsubscribe unsub) {
-        JobRecord rec = jobs.get(unsub.jobId());
-        if (rec != null) {
-            rec.subscribers().removeIf(s -> s.session() == this);
-        }
+  private void handleCancel(Envelope envelope, JobCancel cancel) {
+    JobId jobId = envelope.jobId();
+    if (jobId == null) {
+      return;
     }
-
-    private void emitJobEvent(JobRecord record, EventBody body) {
-        long seq = nextSeq();
-        record.setLastEventSeq(seq);
-        JobEvent event = new JobEvent(body.kind().wire(), runtime.clock().instant(),
-                mapper.valueToTree(body));
-        sendJobMessage(record, Message.Type.JOB_EVENT, event, seq);
-        for (JobRecord.Subscriber sub : record.subscribers()) {
-            if (sub.session() != this) {
-                sub.session().sendJobMessage(record, Message.Type.JOB_EVENT, event, seq);
-            }
-        }
+    JobRecord rec = runtime.job(jobId);
+    if (rec == null) {
+      return;
     }
-
-    private void emitJobError(
-            JobRecord record, String finalStatus, ErrorCode code, String message) {
-        JobError err = JobError.fromJson(finalStatus, code, message, null, null);
-        sendJobMessage(record, Message.Type.JOB_ERROR, err, nextSeq());
+    if (!rec.principal().equals(principal)) {
+      return; // §7.6: only the submitter may cancel
     }
-
-    private void sendJobErrorTopLevel(
-            @Nullable Envelope origin, ErrorCode code, String message) {
-        JobError err = JobError.fromJson(JobError.ERROR, code, message, null, null);
-        send(Message.Type.JOB_ERROR, err, sessionId,
-                origin != null ? origin.traceId() : null,
-                origin != null ? origin.jobId() : null,
-                null);
+    if (rec.transitionTo(JobRecord.Status.CANCELLED)) {
+      var w = rec.worker();
+      if (w != null) {
+        w.cancel(true);
+      }
+      emitJobError(
+          rec,
+          JobError.CANCELLED,
+          ErrorCode.CANCELLED,
+          cancel.reason() != null ? cancel.reason() : "cancelled");
+      credentialBinding.revokeAll(rec);
     }
+  }
 
-    private long nextSeq() {
-        return eventSeq.incrementAndGet();
+  private JobContext issueContext(JobRecord record) {
+    LeaseGuard guard = new LeaseGuard(record.lease(), record.constraints(), runtime.clock());
+    return new JobContext() {
+      @Override
+      public void emit(EventBody body) {
+        emitJobEvent(record, body);
+      }
+
+      @Override
+      public boolean cancelled() {
+        return record.status().terminal() || phase == Phase.CLOSED;
+      }
+
+      @Override
+      public void authorize(String namespace, String pattern)
+          throws dev.arcp.core.error.PermissionDeniedException,
+              dev.arcp.core.error.LeaseExpiredException,
+              dev.arcp.core.error.BudgetExhaustedException {
+        guard.authorize(namespace, pattern);
+        record.budget().ensureAllPositive();
+      }
+
+      @Override
+      public List<Credential> credentials() {
+        return wireCredentials(record);
+      }
+    };
+  }
+
+  private static List<Credential> wireCredentials(JobRecord record) {
+    return record.credentials().stream().map(IssuedCredential::wire).toList();
+  }
+
+  private static @Nullable List<Credential> nullableWireCredentials(JobRecord record) {
+    List<Credential> credentials = wireCredentials(record);
+    return credentials.isEmpty() ? null : credentials;
+  }
+
+  private static Throwable rootCause(Throwable throwable) {
+    Throwable root = throwable;
+    while (root.getCause() != null) {
+      root = root.getCause();
     }
+    return root;
+  }
 
-    private void sendJobMessage(JobRecord rec, Message.Type type, Message msg, long seq) {
-        send(type, msg, sessionId, rec.traceId(), rec.jobId(), seq);
+  private void handleSubscribe(JobSubscribe sub) {
+    if (!negotiated.contains(Feature.SUBSCRIBE)) {
+      return;
     }
+    JobRecord rec = runtime.job(sub.jobId());
+    if (rec == null || !rec.principal().equals(principal)) {
+      sendJobErrorTopLevel(
+          null, ErrorCode.JOB_NOT_FOUND, "job not found or not visible: " + sub.jobId());
+      return;
+    }
+    rec.subscribers().add(new JobRecord.Subscriber(this, rec.jobId()));
+    boolean wantHistory = Boolean.TRUE.equals(sub.history());
+    long subscribedFrom = sub.fromEventSeq() != null ? sub.fromEventSeq() : 0;
+    long now = eventSeq.get();
+    JobSubscribed response =
+        new JobSubscribed(
+            rec.jobId(),
+            rec.status().wire(),
+            rec.resolvedAgent(),
+            rec.lease(),
+            null,
+            rec.traceId(),
+            now,
+            wantHistory);
+    send(Message.Type.JOB_SUBSCRIBED, response, sessionId, rec.traceId(), rec.jobId(), null);
 
-    private void send(
-            Message.Type type,
-            Message payload,
-            @Nullable SessionId sid,
-            @Nullable TraceId tid,
-            @Nullable JobId jid,
-            @Nullable Long seq) {
-        if (phase == Phase.CLOSED) {
-            return;
-        }
-        ObjectNode payloadJson = Messages.encodePayload(mapper, payload);
-        Envelope env = new Envelope(
-                Envelope.VERSION,
-                MessageId.generate(),
-                type.wire(),
-                sid,
-                tid,
-                jid,
-                seq,
-                payloadJson);
-        if (seq != null) {
-            resumeBuffer.record(env);
-        }
+    if (wantHistory) {
+      for (Envelope replay : rec.eventsSince(subscribedFrom)) {
         try {
-            transport.send(env);
+          transport.send(replay);
         } catch (RuntimeException e) {
-            log.warn("send failed: {}", e.toString());
-            shutdown("send failure");
+          log.warn("replay send failed: {}", e.toString());
+          return;
         }
+      }
     }
+  }
 
-    public Set<Feature> negotiated() {
-        return java.util.Collections.unmodifiableSet(negotiated);
+  private void handleUnsubscribe(JobUnsubscribe unsub) {
+    JobRecord rec = runtime.job(unsub.jobId());
+    if (rec != null) {
+      rec.subscribers().removeIf(s -> s.session() == this);
     }
+  }
 
-    public @Nullable SessionId sessionId() {
-        return sessionId;
+  private void emitJobEvent(JobRecord record, EventBody body) {
+    long seq = nextSeq();
+    record.setLastEventSeq(seq);
+    JobEvent event =
+        new JobEvent(body.kind().wire(), runtime.clock().instant(), mapper.valueToTree(body));
+    Envelope sent =
+        send(Message.Type.JOB_EVENT, event, sessionId, record.traceId(), record.jobId(), seq);
+    if (sent != null) {
+      record.recordEvent(sent);
     }
+    for (JobRecord.Subscriber sub : record.subscribers()) {
+      if (sub.session() != this) {
+        sub.session().sendJobMessage(record, Message.Type.JOB_EVENT, event, seq);
+      }
+    }
+  }
 
-    public @Nullable Principal principal() {
-        return principal;
-    }
+  private void emitJobError(JobRecord record, String finalStatus, ErrorCode code, String message) {
+    JobError err = JobError.fromJson(finalStatus, code, message, null, null);
+    sendJobMessage(record, Message.Type.JOB_ERROR, err, nextSeq());
+  }
 
-    public Phase phase() {
-        return phase;
+  private void sendJobErrorTopLevel(@Nullable Envelope origin, ErrorCode code, String message) {
+    JobError err = JobError.fromJson(JobError.ERROR, code, message, null, null);
+    send(
+        Message.Type.JOB_ERROR,
+        err,
+        sessionId,
+        origin != null ? origin.traceId() : null,
+        origin != null ? origin.jobId() : null,
+        null);
+  }
+
+  private long nextSeq() {
+    return eventSeq.incrementAndGet();
+  }
+
+  private void sendJobMessage(JobRecord rec, Message.Type type, Message msg, long seq) {
+    send(type, msg, sessionId, rec.traceId(), rec.jobId(), seq);
+  }
+
+  private @Nullable Envelope send(
+      Message.Type type,
+      Message payload,
+      @Nullable SessionId sid,
+      @Nullable TraceId tid,
+      @Nullable JobId jid,
+      @Nullable Long seq) {
+    if (phase == Phase.CLOSED) {
+      return null;
     }
+    ObjectNode payloadJson = Messages.encodePayload(mapper, payload);
+    Envelope env =
+        new Envelope(
+            Envelope.VERSION, MessageId.generate(), type.wire(), sid, tid, jid, seq, payloadJson);
+    if (seq != null) {
+      resumeBuffer.record(env);
+    }
+    try {
+      transport.send(env);
+    } catch (RuntimeException e) {
+      log.warn("send failed: {}", e.toString());
+      shutdown("send failure");
+    }
+    return env;
+  }
+
+  public Set<Feature> negotiated() {
+    return java.util.Collections.unmodifiableSet(negotiated);
+  }
+
+  public @Nullable SessionId sessionId() {
+    return sessionId;
+  }
+
+  public @Nullable Principal principal() {
+    return principal;
+  }
+
+  public Phase phase() {
+    return phase;
+  }
 }

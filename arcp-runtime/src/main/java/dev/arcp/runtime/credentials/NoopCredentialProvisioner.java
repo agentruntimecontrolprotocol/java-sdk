@@ -8,18 +8,18 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public final class NoopCredentialProvisioner implements CredentialProvisioner {
-    public static final NoopCredentialProvisioner INSTANCE = new NoopCredentialProvisioner();
+  public static final NoopCredentialProvisioner INSTANCE = new NoopCredentialProvisioner();
 
-    private NoopCredentialProvisioner() {}
+  private NoopCredentialProvisioner() {}
 
-    @Override
-    public CompletableFuture<List<IssuedCredential>> issue(
-            Lease lease, LeaseConstraints constraints, JobContext ctx) {
-        return CompletableFuture.completedFuture(List.of());
-    }
+  @Override
+  public CompletableFuture<List<IssuedCredential>> issue(
+      Lease lease, LeaseConstraints constraints, JobContext ctx) {
+    return CompletableFuture.completedFuture(List.of());
+  }
 
-    @Override
-    public CompletableFuture<Void> revoke(CredentialId id) {
-        return CompletableFuture.completedFuture(null);
-    }
+  @Override
+  public CompletableFuture<Void> revoke(CredentialId id) {
+    return CompletableFuture.completedFuture(null);
+  }
 }

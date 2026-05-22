@@ -21,44 +21,43 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 
 @SpringBootTest(
-        classes = SpringBootEndToEndTest.TestApp.class,
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+    classes = SpringBootEndToEndTest.TestApp.class,
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class SpringBootEndToEndTest {
 
-    @LocalServerPort
-    int port;
+  @LocalServerPort int port;
 
-    @Autowired
-    ArcpRuntime runtime;
+  @Autowired ArcpRuntime runtime;
 
-    @SpringBootApplication
-    static class TestApp {
-        public static void main(String[] args) {
-            SpringApplication.run(TestApp.class, args);
-        }
-
-        @Bean
-        ArcpRuntime arcpRuntime() {
-            return ArcpRuntime.builder()
-                    .agent("spring-echo", "1.0.0",
-                            (input, ctx) -> JobOutcome.Success.inline(input.payload()))
-                    .build();
-        }
+  @SpringBootApplication
+  static class TestApp {
+    public static void main(String[] args) {
+      SpringApplication.run(TestApp.class, args);
     }
 
-    @Test
-    void springAdapterAcceptsAndExecutesJob() throws Exception {
-        URI uri = URI.create("ws://127.0.0.1:" + port + "/arcp");
-        WebSocketTransport transport = WebSocketTransport.connect(uri);
-        try (ArcpClient client = ArcpClient.builder(transport).build()) {
-            client.connect(Duration.ofSeconds(5));
-            JobHandle handle = client.submit(ArcpClient.jobSubmit(
-                    "spring-echo@1.0.0",
-                    JsonNodeFactory.instance.objectNode().put("greeting", "spring")));
-            JobResult result = handle.result().get(5, TimeUnit.SECONDS);
-            assertThat(result.finalStatus()).isEqualTo(JobResult.SUCCESS);
-            assertThat(result.result().get("greeting").asText()).isEqualTo("spring");
-        }
-        runtime.close();
+    @Bean
+    ArcpRuntime arcpRuntime() {
+      return ArcpRuntime.builder()
+          .agent("spring-echo", "1.0.0", (input, ctx) -> JobOutcome.Success.inline(input.payload()))
+          .build();
     }
+  }
+
+  @Test
+  void springAdapterAcceptsAndExecutesJob() throws Exception {
+    URI uri = URI.create("ws://127.0.0.1:" + port + "/arcp");
+    WebSocketTransport transport = WebSocketTransport.connect(uri);
+    try (ArcpClient client = ArcpClient.builder(transport).build()) {
+      client.connect(Duration.ofSeconds(5));
+      JobHandle handle =
+          client.submit(
+              ArcpClient.jobSubmit(
+                  "spring-echo@1.0.0",
+                  JsonNodeFactory.instance.objectNode().put("greeting", "spring")));
+      JobResult result = handle.result().get(5, TimeUnit.SECONDS);
+      assertThat(result.finalStatus()).isEqualTo(JobResult.SUCCESS);
+      assertThat(result.result().get("greeting").asText()).isEqualTo("spring");
+    }
+    runtime.close();
+  }
 }

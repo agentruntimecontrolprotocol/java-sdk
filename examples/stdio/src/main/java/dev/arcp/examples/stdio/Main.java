@@ -7,9 +7,12 @@ import dev.arcp.core.messages.JobResult;
 import dev.arcp.core.transport.StdioTransport;
 import dev.arcp.runtime.ArcpRuntime;
 import dev.arcp.runtime.agent.JobOutcome;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.Duration;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -17,12 +20,10 @@ import java.util.concurrent.TimeUnit;
  * PipedInputStream/PipedOutputStream pairs, mimicking a subprocess stdio channel.
  */
 public final class Main {
+    private static final int EOF = -1;
+
     public static void main(String[] args) throws Exception {
-        // Cross-wire: serverOut → clientIn, clientOut → serverIn.
-        PipedOutputStream serverOut = new PipedOutputStream();
-        PipedOutputStream clientOut = new PipedOutputStream();
-        PipedInputStream serverIn = new PipedInputStream(clientOut);
-        PipedInputStream clientIn = new PipedInputStream(serverOut);
+        PipePair pipe = pipePair();
 
         ArcpRuntime runtime =
                 ArcpRuntime.builder()
@@ -31,10 +32,11 @@ public final class Main {
                                 "1.0.0",
                                 (input, ctx) -> JobOutcome.Success.inline(input.payload()))
                         .build();
-        runtime.accept(new StdioTransport(serverIn, serverOut).start());
+        runtime.accept(new StdioTransport(pipe.runtimeIn, pipe.runtimeOut).start());
 
         try (ArcpClient client =
-                ArcpClient.builder(new StdioTransport(clientIn, clientOut).start()).build()) {
+                ArcpClient.builder(new StdioTransport(pipe.clientIn, pipe.clientOut).start())
+                        .build()) {
             client.connect(Duration.ofSeconds(5));
             JobHandle handle =
                     client.submit(
@@ -47,5 +49,96 @@ public final class Main {
             System.out.println("OK stdio");
         }
         runtime.close();
+    }
+
+    private static PipePair pipePair() {
+        BlockingQueue<Integer> runtimeToClient = new LinkedBlockingQueue<>();
+        BlockingQueue<Integer> clientToRuntime = new LinkedBlockingQueue<>();
+        return new PipePair(
+                stream(clientToRuntime),
+                sink(runtimeToClient),
+                stream(runtimeToClient),
+                sink(clientToRuntime));
+    }
+
+    private record PipePair(
+            InputStream runtimeIn, OutputStream runtimeOut, InputStream clientIn, OutputStream clientOut) {}
+
+    private static OutputStream sink(BlockingQueue<Integer> queue) {
+        return new OutputStream() {
+            private volatile boolean closed;
+
+            @Override
+            public void write(int b) throws IOException {
+                if (closed) {
+                    throw new IOException("stream closed");
+                }
+                queue.add(b & 0xFF);
+            }
+
+            @Override
+            public void close() {
+                if (!closed) {
+                    closed = true;
+                    queue.add(EOF);
+                }
+            }
+        };
+    }
+
+    private static InputStream stream(BlockingQueue<Integer> queue) {
+        return new InputStream() {
+            private volatile boolean closed;
+
+            @Override
+            public int read() throws IOException {
+                if (closed) {
+                    return EOF;
+                }
+                try {
+                    Integer value = queue.poll(30, TimeUnit.SECONDS);
+                    if (value == null || value == EOF) {
+                        closed = true;
+                        return EOF;
+                    }
+                    return value;
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("interrupted", e);
+                }
+            }
+
+            @Override
+            public int read(byte[] bytes, int offset, int length) throws IOException {
+                if (length == 0) {
+                    return 0;
+                }
+                int first = read();
+                if (first == EOF) {
+                    return EOF;
+                }
+                bytes[offset] = (byte) first;
+                int count = 1;
+                while (count < length) {
+                    Integer next = queue.poll();
+                    if (next == null) {
+                        break;
+                    }
+                    if (next == EOF) {
+                        closed = true;
+                        queue.add(EOF);
+                        break;
+                    }
+                    bytes[offset + count] = next.byteValue();
+                    count++;
+                }
+                return count;
+            }
+
+            @Override
+            public void close() {
+                closed = true;
+            }
+        };
     }
 }
