@@ -66,7 +66,7 @@ Propagation is end-to-end:
 ## Viewing traces
 
 Point the OTel SDK exporter at any compatible backend (Jaeger, Tempo,
-Honeycomb, Grafana Cloud…):
+Honeycomb, Grafana Cloud...):
 
 ```java
 SdkTracerProvider provider = SdkTracerProvider.builder()

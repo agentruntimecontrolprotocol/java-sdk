@@ -45,7 +45,7 @@ Runnable: [`recipes/idempotent-retry/`](../recipes/idempotent-retry/)
 ## Streaming events + final result
 
 ```java
-JobHandle handle = client.submit(…);
+JobHandle handle = client.submit(...);
 
 // React to events as they arrive:
 handle.events().subscribe(new Flow.Subscriber<EventBody>() {

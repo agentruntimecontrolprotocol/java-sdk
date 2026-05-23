@@ -216,7 +216,7 @@ All 15 canonical error codes, their likely causes, and fixes.
 
 **Fixes**
 - Set `ArcpClient.Builder.bearer(token)`.
-- Check that the token matches the verifier: `BearerVerifier.staticToken(…)`
+- Check that the token matches the verifier: `BearerVerifier.staticToken(...)`
   or your custom SPI implementation.
 - See [guides/auth.md](guides/auth.md).
 

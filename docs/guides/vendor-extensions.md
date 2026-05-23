@@ -59,7 +59,7 @@ handle.events().subscribe(new Flow.Subscriber<EventBody>() {
             }
         }
     }
-    // … onSubscribe, onError, onComplete …
+    // ... onSubscribe, onError, onComplete ...
 });
 ```
 

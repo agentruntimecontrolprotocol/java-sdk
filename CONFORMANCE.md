@@ -18,7 +18,7 @@ works" is decomposed into multiple binary rows.
 
 | Requirement | Status | Location |
 |---|---|---|
-| §5.1 Envelope shape (`arcp`, `id`, `type`, `payload`, …) | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java:22](arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java#L22) |
+| §5.1 Envelope shape (`arcp`, `id`, `type`, `payload`, ...) | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java:22](arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java#L22) |
 | §5.1 Unknown top-level fields ignored | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/ArcpMapper.java](arcp-core/src/main/java/dev/arcp/core/wire/ArcpMapper.java) sets `FAIL_ON_UNKNOWN_PROPERTIES=false` |
 | §5.1 `arcp` version string `"1"` | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java:31](arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java#L31) |
 

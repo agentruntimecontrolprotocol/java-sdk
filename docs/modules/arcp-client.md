@@ -33,7 +33,7 @@ ArcpClient client = ArcpClient.builder(transport)
 
 client.connect(Duration.ofSeconds(5));   // performs session.hello / welcome
 
-JobHandle handle = client.submit(…);
+JobHandle handle = client.submit(...);
 Page<JobSummary> page = client.listJobs(JobFilter.all());
 JobHandle observer = client.subscribe(jobId, SubscribeOptions.live());
 
@@ -42,7 +42,7 @@ client.close(); // sends session.bye, closes transport
 
 ### `JobHandle`
 
-Returned by `client.submit(…)` and `client.subscribe(…)`.
+Returned by `client.submit(...)` and `client.subscribe(...)`.
 
 ```java
 JobId                         handle.jobId();
@@ -73,7 +73,7 @@ String all = stream.toMemory(resultId);
 JDK `HttpClient.WebSocket` adapter:
 
 ```java
-WebSocketTransport t = WebSocketTransport.connect(URI.create("ws://…/arcp"));
+WebSocketTransport t = WebSocketTransport.connect(URI.create("ws://.../arcp"));
 // or with builder for TLS / custom headers:
 WebSocketTransport t = WebSocketTransport.builder(uri)
     .httpClient(customClient)

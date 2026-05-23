@@ -46,7 +46,7 @@ Then sanity-check:
       `./gradlew test` output.
 - [ ] [`README.md`](README.md) version coordinates match the version you
       are about to cut (Gradle + Maven snippets).
-- [ ] All 10 examples print `OK …` on a fresh clone.
+- [ ] All 10 examples print `OK ...` on a fresh clone.
 - [ ] `make -C docs/diagrams` produces no diff against the committed SVGs.
 
 ## Cutting the release

@@ -30,7 +30,7 @@ JobHandle handle = client.submit(
     .build());
 ```
 
-`client.submit(…)` blocks until `job.accepted` is received. The returned
+`client.submit(...)` blocks until `job.accepted` is received. The returned
 `JobHandle` carries:
 - `handle.jobId()` — the runtime-assigned `JobId`
 - `handle.agentRef()` — the resolved `name@version`
@@ -80,7 +80,7 @@ The runtime interrupts the worker virtual thread. Agents check
 (input, ctx) -> {
     for (Item item : items) {
         if (ctx.cancelled()) break;
-        // … process item …
+        // ... process item ...
     }
     return JobOutcome.Success.inline(results);
 }

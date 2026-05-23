@@ -96,7 +96,7 @@ Disable auto-ack (manual mode):
 ArcpClient client = ArcpClient.builder(transport)
     .autoAck(false)
     .build();
-// …
+// ...
 client.ack(handle.lastReceivedSeq());
 ```
 
@@ -111,7 +111,7 @@ After any disconnect, the client can reconnect and replay missed events:
 String resumeToken = client.session().resumeToken();
 long lastSeq = client.session().lastReceivedSeq();
 
-// … transport reconnects …
+// ... transport reconnects ...
 
 ArcpClient fresh = ArcpClient.builder(newTransport)
     .bearer("my-token")

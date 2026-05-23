@@ -52,7 +52,7 @@ WebSocketTransport transport = WebSocketTransport.connect(
     URI.create("ws://localhost:8080/arcp"));
 try (ArcpClient client = ArcpClient.builder(transport).build()) {
     client.connect(Duration.ofSeconds(5));
-    // …
+    // ...
 }
 ```
 
@@ -89,7 +89,7 @@ server.close();  // stops Jetty, closes all sessions
 
 The server calls `runtime.accept(transport)` for each incoming connection.
 TLS: pass a pre-configured `SslContextFactory.Server` to
-`ArcpJettyServer.Builder.sslContextFactory(…)`.
+`ArcpJettyServer.Builder.sslContextFactory(...)`.
 
 ## Spring Boot 3.x
 
@@ -127,7 +127,7 @@ implementation("dev.arcp:arcp-middleware-spring-boot:1.0.0")
 ## Jakarta WebSocket
 
 `arcp-middleware-jakarta` exposes a `ServerEndpointConfig` for any Jakarta
-EE 10+ container (Tomcat 10, WildFly 29, GlassFish 7…):
+EE 10+ container (Tomcat 10, WildFly 29, GlassFish 7...):
 
 ```java
 ServerEndpointConfig config = ArcpJakartaEndpoint.configFor(runtime, "/arcp");
@@ -173,7 +173,7 @@ runtime.accept(runtimeTransport);
 StdioTransport clientTransport = StdioTransport.client(processIn, processOut);
 try (ArcpClient client = ArcpClient.builder(clientTransport).build()) {
     client.connect(Duration.ofSeconds(5));
-    // …
+    // ...
 }
 ```
 
@@ -187,7 +187,7 @@ the full parent/child wiring including process spawning.
 ## Custom transport
 
 Implement `Transport` directly for any other channel (UNIX domain sockets,
-named pipes, message queues…):
+named pipes, message queues...):
 
 ```java
 public class MyTransport implements Transport, AutoCloseable {

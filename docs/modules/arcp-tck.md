@@ -48,7 +48,7 @@ public interface TckProvider extends AutoCloseable {
     default ArcpClient connectWithProvisionedCredentials(
             CredentialProvisioner provisioner,
             CredentialRevocationStore store) throws Exception {
-        throw new UnsupportedOperationException("…");
+        throw new UnsupportedOperationException("...");
     }
 }
 ```
@@ -123,7 +123,7 @@ tests to fail with `AGENT_VERSION_NOT_AVAILABLE`.
 ## Credential assertion opt-in
 
 The `§9.8 provisioned credentials` test calls
-`TckProvider.connectWithProvisionedCredentials(…)`. If your provider does not
+`TckProvider.connectWithProvisionedCredentials(...)`. If your provider does not
 override that method, the test is automatically skipped (`Assumptions.abort`)
 rather than failing.
 

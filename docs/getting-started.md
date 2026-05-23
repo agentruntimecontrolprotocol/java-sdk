@@ -96,7 +96,7 @@ try (ArcpJettyServer server = ArcpJettyServer.builder(runtime).build().start()) 
     WebSocketTransport transport = WebSocketTransport.connect(server.uri());
     try (ArcpClient client = ArcpClient.builder(transport).build()) {
         client.connect(Duration.ofSeconds(5));
-        // … same submit / result as above
+        // ... same submit / result as above
     }
 }
 ```
@@ -116,7 +116,7 @@ runtime.accept(runtimeTransport);
 
 // Client side (parent process, connected via pipes):
 StdioTransport clientTransport = StdioTransport.client(processIn, processOut);
-try (ArcpClient client = ArcpClient.builder(clientTransport).build()) { … }
+try (ArcpClient client = ArcpClient.builder(clientTransport).build()) { ... }
 ```
 
 Both ends use newline-delimited JSON frames (§4.2).

@@ -31,7 +31,7 @@ disconnect and replay any missed events, without re-submitting jobs.
 String token = client.session().resumeToken();
 long lastSeq  = client.session().lastReceivedSeq();
 
-// … transport failure — reconnect the underlying connection …
+// ... transport failure — reconnect the underlying connection ...
 Transport newTransport = WebSocketTransport.connect(serverUri);
 
 // 2. Resume
