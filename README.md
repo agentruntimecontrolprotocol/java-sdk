@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://central.sonatype.com/artifact/dev.arcp/arcp"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/dev.arcp/arcp.svg"></a>
-  <a href="https://github.com/nficano/arpc/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nficano/arpc/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md"><img alt="ARCP" src="https://img.shields.io/badge/ARCP-v1.1%20draft-blue"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-lightgrey"></a>
 </p>
@@ -15,7 +15,7 @@
   <a href="#installation">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/">Guides</a> ·
-  <a href="docs/">API reference</a>
+  <a href="docs/modules/arcp.md">API reference</a>
 </p>
 
 ---
@@ -358,7 +358,7 @@ ARCP is transport-agnostic. This SDK ships a WebSocket transport (default, JDK `
 
 ## API reference
 
-Full API reference — every type, method, and event payload — is in [`docs/`](docs/).
+Full API reference — every type, method, and event payload — is in [`docs/`](docs/), with per-module pages under [`docs/modules/`](docs/modules/) and topic guides under [`docs/guides/`](docs/guides/).
 
 ## Versioning and compatibility
 
