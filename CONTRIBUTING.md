@@ -1,90 +1,156 @@
-# Contributing
+# Contributing to dev.arcp:arcp
 
-Thanks for considering a contribution. This SDK tracks
-[`draft-arcp-1.1.md`](../spec/docs/draft-arcp-1.1.md). Behavior changes that
-diverge from the spec are out of scope unless they fix a clear interpretation
-bug; please open an issue first to discuss.
+Thanks for your interest in improving the Java SDK for ARCP. This
+document covers how to report issues, propose changes, and get a change merged.
 
-## Prerequisites
+By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-- JDK 21+ (Temurin is what CI uses). Set `JAVA_HOME` accordingly.
-- Gradle 9.x via the bundled wrapper — do not install Gradle separately.
-- Graphviz on `PATH` if you intend to touch `docs/diagrams/`.
+## Where changes belong
 
-## Local checks
+ARCP is two things in two places, and a change belongs to exactly one of them:
 
-```bash
-./gradlew build                      # compile + test all 10 modules
-./gradlew :examples:cancel:run       # run any of the 10 examples
-./gradlew :arcp-core:pitest          # opt-in mutation analysis
-make -C docs/diagrams                # render SVGs after editing .dot
-```
+- **The protocol** — the wire format, message semantics, lease rules, error
+  taxonomy, feature flags. These live in the
+  [specification repository](https://github.com/agentruntimecontrolprotocol/spec).
+  If your idea changes what goes *on the wire* or what a conformant runtime must
+  do, it is a spec change — open it there, not here. This SDK implements the
+  spec; it does not define it.
+- **This SDK** — how the protocol is expressed idiomatically in Java:
+  bugs, ergonomics, performance, missing-but-specified features, docs, tests.
+  Those belong here.
 
-`./gradlew build` runs ~140 tasks and finishes in about a minute on a fresh
-checkout. All 18 test suites must stay green; broken tests block the PR.
+When in doubt, open an issue here and we'll redirect if it's really a protocol
+question.
 
-## Coding conventions
+## The golden rule: conform, don't extend
 
-- **JDK 21 floor.** `--release 21` is set in the root build; bytecode must
-  stay consumable on JDK 21 even though the toolchain may compile on 25.
-- **No `--enable-preview`** on consumer-facing artifacts. `StructuredTaskScope`
-  is preview in 21 and final in 25 with a different shape; the runtime uses
-  plain virtual threads on `Executors.newVirtualThreadPerTaskExecutor()`.
-- **Records over Lombok.** All value types are records; the canonical
-  constructor enforces invariants.
-- **Sealed types for taxonomies.** `Message`, `EventBody`, `ArcpException`
-  are sealed so dispatch is exhaustive at compile time. New wire types or
-  error codes touch the sealed permits list.
-- **No `null` returns without `@Nullable`.** JSpecify is on the compile
-  classpath; mark anything that may return null.
-- **Thread safety on shared mutable state.** Counters use
-  `AtomicReference` / `AtomicLong` with CAS loops; idempotency uses
-  `ConcurrentHashMap`. Avoid `synchronized` on hot paths.
-- **Spec § citations in Javadoc.** Every public type implementing a
-  protocol concept should cite the matching spec section.
+A change to this SDK must keep it a faithful client of
+[ARCP v1.1 (draft)](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md).
+Concretely:
 
-## Test discipline
-
-- A change to runtime FSM logic requires a test that exercises the
-  transition.
-- A change to wire format requires an envelope round-trip assertion
-  ([`EnvelopeRoundTripPropertyTest`](arcp-core/src/test/java/dev/arcp/core/EnvelopeRoundTripPropertyTest.java)
-  covers most of it via jqwik).
-- A change visible to `Lease.contains`, `BudgetCounters`, or
-  `LeaseGuard.authorize` requires either a property or a focused unit test.
-
-## Diagrams
-
-Light and dark variants must remain structurally identical — only color hex
-codes legitimately differ. The `diagrams` workflow re-runs `dot -Tsvg` against
-every `.dot` source and fails the PR if a checked-in SVG diverges from the
-fresh render. Edit both variants together; commit both `.dot` and rendered
-`.svg`.
-
-## Conformance
-
-`CONFORMANCE.md` rows that flip from `Deferred` to `Implemented` MUST cite a
-`path:LineNumber` for the load-bearing code, and the PR MUST include a test
-that exercises that line. PRs that mark a row Implemented without an
-exercising test will be rejected at review.
-
-## Commit + PR style
-
-- Imperative summaries: "Wire heartbeat watchdog into SessionLoop", not
-  "Added heartbeat watchdog".
-- One topic per PR — split mechanical refactors from behavior changes.
-- Reference the issue number in the PR description if one exists.
-- New public types or methods carry Javadoc and at minimum one test.
+- **Don't invent wire behavior.** No envelope fields, event kinds, error codes,
+  or feature flags that the spec doesn't define. If you need one, it's a spec
+  proposal first.
+- **Negotiate honestly.** Only advertise a feature flag in `session.hello` once
+  the SDK actually implements it. The feature matrix in the README must match
+  what the code negotiates — a row marked `Supported` is a promise.
+- **Respect the semantics.** Sequence numbers stay gap-free and monotonic;
+  `LEASE_EXPIRED` and `BUDGET_EXHAUSTED` stay non-retryable; the effective
+  feature set is the intersection of client and runtime advertisements. Tests
+  must not paper over a semantic the spec requires.
+- **Stay layered.** This SDK controls runtimes. It does not expose tools (that's
+  MCP) or export telemetry (that's OpenTelemetry). PRs that blur those layers
+  will be asked to move the logic out.
 
 ## Reporting bugs
 
-Open a GitHub issue. Include:
+Open an issue with: the SDK version and Java version, the runtime you
+connected to, a minimal reproduction (the smallest program that triggers it),
+what you expected, and what happened. A failing test is the best possible bug
+report. Wire-level traces (the envelopes exchanged) help enormously for protocol
+behavior — redact any `auth.token` or provisioned-credential `value` first.
 
-- JDK version (`java --version`).
-- Whether the bug reproduces under `MemoryTransport` (the in-process
-  pair), and if not, which transport.
-- A failing test or a minimal client + runtime snippet — the
-  [`SmokeRoundTripTest`](arcp-client/src/test/java/dev/arcp/client/SmokeRoundTripTest.java)
-  shape is a good template.
+## Proposing a change
 
-Security-sensitive reports follow [SECURITY.md](SECURITY.md) instead.
+For anything beyond a small fix, open an issue describing the problem before
+writing code, so we can agree on the approach. Small, focused PRs review faster
+than large ones; if a change is big, say so early and we'll help break it down.
+
+## Development setup
+
+The build targets JDK 21 LTS (`--release 21`) and is driven entirely by the
+bundled Gradle wrapper — do not install Gradle separately. CI runs on Temurin
+21 and 25; either works locally. Clone, point `JAVA_HOME` at a JDK 21+, and
+let the wrapper resolve everything else:
+
+```sh
+git clone https://github.com/nficano/arpc.git
+cd arpc/java-sdk
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # macOS; use your distro's equivalent
+./gradlew help                                     # bootstraps the wrapper + toolchain
+```
+
+The build is a multi-module Gradle project (`arcp-core`, `arcp-client`,
+`arcp-runtime`, the `arcp` umbrella, transport adapters, middleware, the TCK,
+and example/recipe projects); `settings.gradle.kts` is the canonical list.
+
+## Tests and conformance
+
+Two layers must pass before a PR merges:
+
+- **Unit tests** — this SDK's own suite:
+
+  ```sh
+  ./gradlew build
+  ```
+
+  `build` compiles every module, runs Spotless, and executes the JUnit 5 +
+  jqwik suites across all subprojects. Use `./gradlew test` (or
+  `./gradlew :arcp-core:test`) to skip compilation of unrelated modules during
+  iteration.
+
+- **Conformance** — the SDK's behavior against the reference runtime. New
+  protocol-facing code (session negotiation, event sequencing, lease handling,
+  error mapping) needs a test that exercises the real exchange, not a mock that
+  assumes the answer. The reusable conformance suite lives in `arcp-tck` as a
+  JUnit 5 `@TestFactory` (`dev.arcp.tck.ConformanceSuite` + `TckProvider`);
+  point it at any `Transport` pair — `MemoryTransport.pair()` for the in-process
+  reference runtime, or a live WebSocket pair via `arcp-runtime-jetty` +
+  `arcp-client`'s `WebSocketTransport.connect(uri)`. Run with
+  `./gradlew :arcp-tck:test`.
+
+CI runs both on every PR. A PR that changes which feature flags the SDK
+negotiates must also update the README feature matrix in the same change.
+
+## Coding standards
+
+Formatting is enforced by [Spotless](https://github.com/diffplug/spotless)
+configured with Google Java Format and unused-import removal. The same JDK 21
+`javac` settings (`-Xlint:all`, `-parameters`, UTF-8) and Javadoc generation
+that CI uses are applied to every `java-library` subproject:
+
+```sh
+./gradlew spotlessApply           # auto-format
+./gradlew spotlessCheck           # verify (CI gate on JDK 21)
+./gradlew build                   # compile + lint warnings + tests
+./gradlew javadoc                 # Javadoc for the published modules
+```
+
+Beyond formatting, the house style is captured in the existing code: records
+for value types, sealed hierarchies (`Message`, `EventBody`, `ArcpException`)
+for exhaustive dispatch, JSpecify `@Nullable` on anything that may return null,
+`AtomicReference` / `AtomicLong` / `ConcurrentHashMap` for shared mutable state,
+and a spec `§` citation in the Javadoc of public types that implement a
+protocol concept.
+
+Match the surrounding code. Public API changes need doc comments and an entry in
+the changelog. Prefer clarity over cleverness in a library others build on.
+
+## Commit and pull-request conventions
+
+- Write focused commits with present-tense, imperative subjects
+  (`add result_chunk reassembly`, not `added` / `adds`).
+- Reference the issue a PR closes (`Closes #123`).
+- Keep the PR description honest about scope and any spec sections touched.
+- Rebase on the default branch and ensure CI is green before requesting review.
+- Sign off your commits to certify the [Developer Certificate of Origin](https://developercertificate.org/):
+
+  ```sh
+  git commit -s -m "your message"
+  ```
+
+## Releases
+
+Releases are cut by maintainers. The `release` GitHub Actions workflow is
+dispatched manually with a version input; it builds, signs with the project
+PGP key, publishes the aggregated set of `dev.arcp:*` artifacts to Maven
+Central via the `com.gradleup.nmcp` plugin, and pushes a `vX.Y.Z` tag.
+Detailed operator steps live in [RELEASING.md](RELEASING.md). The SDK is
+versioned with semantic versioning independently of the protocol version it
+speaks; a protocol version bump is noted in the changelog when the negotiated
+ARCP version changes.
+
+## License
+
+By contributing, you agree that your contributions are licensed under the
+project's [Apache-2.0](LICENSE) license.
