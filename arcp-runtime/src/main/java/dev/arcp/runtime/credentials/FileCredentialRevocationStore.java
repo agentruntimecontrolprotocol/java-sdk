@@ -6,20 +6,21 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.arcp.core.credentials.CredentialId;
 import dev.arcp.core.wire.ArcpMapper;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class FileCredentialRevocationStore implements CredentialRevocationStore {
+public final class FileCredentialRevocationStore
+    implements CredentialRevocationStore, AutoCloseable {
   private final Path path;
   private final ObjectMapper mapper;
   private final Map<CredentialId, String> outstanding = new LinkedHashMap<>();
+  private final RandomAccessFile writer;
 
   public FileCredentialRevocationStore(Path path) {
     this(path, ArcpMapper.shared());
@@ -29,6 +30,21 @@ public final class FileCredentialRevocationStore implements CredentialRevocation
     this.path = path;
     this.mapper = mapper;
     load();
+    try {
+      this.writer = new RandomAccessFile(path.toFile(), "rwd");
+      this.writer.seek(this.writer.length());
+    } catch (IOException e) {
+      throw new IllegalStateException("could not open credential revocation store " + path, e);
+    }
+  }
+
+  @Override
+  public synchronized void close() {
+    try {
+      writer.close();
+    } catch (IOException e) {
+      throw new IllegalStateException("could not close credential revocation store " + path, e);
+    }
   }
 
   @Override
@@ -87,11 +103,11 @@ public final class FileCredentialRevocationStore implements CredentialRevocation
     if (!providerHandle.isEmpty()) {
       event.put("provider_handle", providerHandle);
     }
-    try (BufferedWriter writer =
-        Files.newBufferedWriter(
-            path, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-      writer.write(mapper.writeValueAsString(event));
-      writer.newLine();
+    try {
+      String line = mapper.writeValueAsString(event) + "\n";
+      byte[] bytes = line.getBytes(StandardCharsets.UTF_8);
+      writer.write(bytes);
+      writer.getFD().sync();
     } catch (IOException e) {
       throw new IllegalStateException("could not append credential revocation event", e);
     }

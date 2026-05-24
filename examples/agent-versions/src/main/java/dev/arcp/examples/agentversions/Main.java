@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 /** Two registered versions; bare-name resolves to default; unknown version errors. */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("code-refactor", "1.0.0",
                         (input, ctx) -> JobOutcome.Success.inline(
@@ -24,9 +24,9 @@ public final class Main {
                                 JsonNodeFactory.instance.objectNode().put("v", "2.0.0")))
                 .build();
         runtime.agents().setDefault("code-refactor", "2.0.0");
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
 
             JobHandle pinned = client.submit(ArcpClient.jobSubmit(

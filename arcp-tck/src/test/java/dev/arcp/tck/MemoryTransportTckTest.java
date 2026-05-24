@@ -42,15 +42,15 @@ class MemoryTransportTckTest {
 
     @Override
     public ArcpClient connect() {
-      MemoryTransport[] pair = MemoryTransport.pair();
-      runtime.accept(pair[0]);
-      return ArcpClient.builder(pair[1]).build();
+      MemoryTransport.Pair pair = MemoryTransport.pair();
+      runtime.accept(pair.runtime());
+      return ArcpClient.builder(pair.client()).build();
     }
 
     @Override
     public ArcpClient connectWithProvisionedCredentials(
         CredentialProvisioner provisioner, CredentialRevocationStore store) {
-      MemoryTransport[] pair = MemoryTransport.pair();
+      MemoryTransport.Pair pair = MemoryTransport.pair();
       credentialRuntime =
           ArcpRuntime.builder()
               .credentialProvisioner(provisioner)
@@ -58,8 +58,8 @@ class MemoryTransportTckTest {
               .agent(
                   "tck-echo", "1.0.0", (input, ctx) -> JobOutcome.Success.inline(input.payload()))
               .build();
-      credentialRuntime.accept(pair[0]);
-      return ArcpClient.builder(pair[1]).build();
+      credentialRuntime.accept(pair.runtime());
+      return ArcpClient.builder(pair.client()).build();
     }
 
     @Override

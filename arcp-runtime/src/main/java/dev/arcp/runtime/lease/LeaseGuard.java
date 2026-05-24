@@ -6,6 +6,8 @@ import dev.arcp.core.lease.Lease;
 import dev.arcp.core.lease.LeaseConstraints;
 import java.time.Clock;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,6 +19,7 @@ public final class LeaseGuard {
   private final Lease lease;
   private final LeaseConstraints constraints;
   private final Clock clock;
+  private final ConcurrentHashMap<String, Pattern> compiledGlobs = new ConcurrentHashMap<>();
 
   public LeaseGuard(Lease lease, LeaseConstraints constraints, Clock clock) {
     this.lease = lease;
@@ -39,7 +42,7 @@ public final class LeaseGuard {
           "lease expired at " + constraints.expiresAt() + " for " + namespace);
     }
     List<String> patterns = lease.patterns(namespace);
-    if (patterns.stream().noneMatch(allowed -> matches(allowed, pattern))) {
+    if (patterns.stream().noneMatch(allowed -> matchesCached(allowed, pattern))) {
       throw new PermissionDeniedException(
           namespace + " does not permit " + pattern + "; allowed=" + patterns);
     }
@@ -50,11 +53,15 @@ public final class LeaseGuard {
     authorize("model.use", modelId);
   }
 
+  private boolean matchesCached(String pattern, String value) {
+    return compiledGlobs.computeIfAbsent(pattern, LeaseGuard::globToRegex).matcher(value).matches();
+  }
+
   static boolean matches(String pattern, String value) {
     return globToRegex(pattern).matcher(value).matches();
   }
 
-  private static java.util.regex.Pattern globToRegex(String glob) {
+  static java.util.regex.Pattern globToRegex(String glob) {
     StringBuilder sb = new StringBuilder("^");
     int i = 0;
     while (i < glob.length()) {

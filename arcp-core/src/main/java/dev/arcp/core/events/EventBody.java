@@ -41,11 +41,22 @@ public sealed interface EventBody
       return wire;
     }
 
+    private static final java.util.Map<String, Kind> BY_WIRE;
+
+    static {
+      java.util.Map<String, Kind> m = new java.util.HashMap<>();
+      for (Kind k : values()) {
+        m.put(k.wire, k);
+      }
+      BY_WIRE = java.util.Collections.unmodifiableMap(m);
+    }
+
     public static Kind fromWire(String wire) {
-      return java.util.Arrays.stream(values())
-          .filter(k -> k.wire.equals(wire))
-          .findFirst()
-          .orElseThrow(() -> new IllegalArgumentException("unknown event kind: " + wire));
+      Kind k = BY_WIRE.get(wire);
+      if (k == null) {
+        throw new IllegalArgumentException("unknown event kind: " + wire);
+      }
+      return k;
     }
   }
 }

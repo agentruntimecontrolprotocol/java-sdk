@@ -38,10 +38,10 @@ class CredentialProvisioningIntegrationTest {
   void credentialsSurfaceAndRevokeOnSuccess() throws Exception {
     CountingProvisioner provisioner = new CountingProvisioner();
     InMemoryCredentialRevocationStore store = new InMemoryCredentialRevocationStore();
-    MemoryTransport[] pair = MemoryTransport.pair();
+    MemoryTransport.Pair pair = MemoryTransport.pair();
     ArcpRuntime runtime =
         runtime(
-            pair[0],
+            pair.runtime(),
             provisioner,
             store,
             "agent",
@@ -53,7 +53,7 @@ class CredentialProvisioningIntegrationTest {
             });
 
     try (runtime;
-        ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        ArcpClient client = ArcpClient.builder(pair.client()).build()) {
       client.connect(Duration.ofSeconds(5));
       JobHandle handle =
           client.submit(
@@ -92,10 +92,10 @@ class CredentialProvisioningIntegrationTest {
   void credentialsRevokeOnLeaseTimeout() throws Exception {
     CountingProvisioner provisioner = new CountingProvisioner();
     InMemoryCredentialRevocationStore store = new InMemoryCredentialRevocationStore();
-    MemoryTransport[] pair = MemoryTransport.pair();
+    MemoryTransport.Pair pair = MemoryTransport.pair();
     ArcpRuntime runtime =
         runtime(
-            pair[0],
+            pair.runtime(),
             provisioner,
             store,
             "agent",
@@ -106,7 +106,7 @@ class CredentialProvisioningIntegrationTest {
             });
 
     try (runtime;
-        ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        ArcpClient client = ArcpClient.builder(pair.client()).build()) {
       client.connect(Duration.ofSeconds(5));
       JobHandle handle =
           client.submit(
@@ -146,17 +146,17 @@ class CredentialProvisioningIntegrationTest {
             return CompletableFuture.completedFuture(null);
           }
         };
-    MemoryTransport[] pair = MemoryTransport.pair();
+    MemoryTransport.Pair pair = MemoryTransport.pair();
     ArcpRuntime runtime =
         ArcpRuntime.builder()
             .credentialProvisioner(provisioner)
             .credentialRevocationStore(new InMemoryCredentialRevocationStore())
             .agent("agent", "1.0.0", (input, ctx) -> JobOutcome.Success.inline(input.payload()))
             .build();
-    runtime.accept(pair[0]);
+    runtime.accept(pair.runtime());
 
     try (runtime;
-        ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        ArcpClient client = ArcpClient.builder(pair.client()).build()) {
       client.connect(Duration.ofSeconds(5));
       assertThatThrownBy(
               () ->
@@ -178,11 +178,11 @@ class CredentialProvisioningIntegrationTest {
       throws Exception {
     CountingProvisioner provisioner = new CountingProvisioner();
     InMemoryCredentialRevocationStore store = new InMemoryCredentialRevocationStore();
-    MemoryTransport[] pair = MemoryTransport.pair();
-    ArcpRuntime runtime = runtime(pair[0], provisioner, store, "agent", "1.0.0", agent);
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    ArcpRuntime runtime = runtime(pair.runtime(), provisioner, store, "agent", "1.0.0", agent);
 
     try (runtime;
-        ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        ArcpClient client = ArcpClient.builder(pair.client()).build()) {
       client.connect(Duration.ofSeconds(5));
       JobHandle handle =
           client.submit(

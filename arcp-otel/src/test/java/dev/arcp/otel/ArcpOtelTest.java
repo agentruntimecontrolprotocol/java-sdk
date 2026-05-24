@@ -29,9 +29,9 @@ class ArcpOtelTest {
     OpenTelemetry otel = OpenTelemetrySdk.builder().setTracerProvider(provider).build();
     Tracer tracer = otel.getTracer("arcp-otel-test");
 
-    MemoryTransport[] pair = MemoryTransport.pair();
-    Transport sender = ArcpOtel.withTracing(pair[0], tracer);
-    Transport receiver = ArcpOtel.withTracing(pair[1], tracer);
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    Transport sender = ArcpOtel.withTracing(pair.runtime(), tracer);
+    Transport receiver = ArcpOtel.withTracing(pair.client(), tracer);
 
     CopyOnWriteArrayList<Envelope> received = new CopyOnWriteArrayList<>();
     receiver

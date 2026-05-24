@@ -13,16 +13,16 @@ import java.util.EnumSet;
 /** Negotiates heartbeat at 1s interval; idle for &gt;2s then verifies session is still active. */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .heartbeatIntervalSec(1)
                 .agent("noop", "1.0.0",
                         (input, ctx) -> JobOutcome.Success.inline(
                                 JsonNodeFactory.instance.objectNode()))
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1])
+        try (ArcpClient client = ArcpClient.builder(pair.client())
                 .features(EnumSet.of(Feature.HEARTBEAT))
                 .build()) {
             Session session = client.connect(Duration.ofSeconds(5));

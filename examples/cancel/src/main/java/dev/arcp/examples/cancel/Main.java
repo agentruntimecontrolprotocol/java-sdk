@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 /** Submits a long-running job, then cancels it; the resulting future fails with CancelledException. */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("sleeper", "1.0.0", (input, ctx) -> {
                     ctx.emit(new LogEvent("info", "sleeping"));
@@ -27,9 +27,9 @@ public final class Main {
                             dev.arcp.core.error.ErrorCode.CANCELLED, "cooperative");
                 })
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
             JobHandle handle = client.submit(
                     ArcpClient.jobSubmit("sleeper@1.0.0", JsonNodeFactory.instance.objectNode()));

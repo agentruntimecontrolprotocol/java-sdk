@@ -24,7 +24,7 @@ public final class Main {
     private Main() {}
 
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         AtomicBoolean revoked = new AtomicBoolean();
         CredentialProvisioner provisioner = new CredentialProvisioner() {
             @Override
@@ -61,9 +61,9 @@ public final class Main {
                     return JobOutcome.Success.inline(input.payload());
                 })
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (runtime; ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (runtime; ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
             Lease lease = Lease.builder()
                     .allow("model.use", "tier-fast/*")

@@ -22,9 +22,9 @@ class SmokeRoundTripTest {
 
   @Test
   void inProcessJobRoundTrip() throws Exception {
-    MemoryTransport[] pair = MemoryTransport.pair();
-    MemoryTransport runtimeSide = pair[0];
-    MemoryTransport clientSide = pair[1];
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    MemoryTransport runtimeSide = pair.runtime();
+    MemoryTransport clientSide = pair.client();
 
     ArcpRuntime runtime =
         ArcpRuntime.builder()

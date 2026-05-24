@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair1 = MemoryTransport.pair();
-        MemoryTransport[] pair2 = MemoryTransport.pair();
+        MemoryTransport.Pair pair1 = MemoryTransport.pair();
+        MemoryTransport.Pair pair2 = MemoryTransport.pair();
 
         ArcpRuntime runtime =
                 ArcpRuntime.builder()
@@ -37,13 +37,13 @@ public final class Main {
                                     return JobOutcome.Success.inline(input.payload());
                                 })
                         .build();
-        runtime.accept(pair1[0]);
-        runtime.accept(pair2[0]);
+        runtime.accept(pair1.runtime());
+        runtime.accept(pair2.runtime());
 
         JobId jobId;
 
         // Client A: submit the job and wait for it to complete.
-        try (ArcpClient clientA = ArcpClient.builder(pair1[1]).bearer("demo").build()) {
+        try (ArcpClient clientA = ArcpClient.builder(pair1.client()).bearer("demo").build()) {
             clientA.connect(Duration.ofSeconds(5));
             JobHandle handle =
                     clientA.submit(
@@ -57,7 +57,7 @@ public final class Main {
         AtomicInteger replayCount = new AtomicInteger();
         CompletableFuture<Void> allReplayed = new CompletableFuture<>();
 
-        try (ArcpClient clientB = ArcpClient.builder(pair2[1]).bearer("demo").build()) {
+        try (ArcpClient clientB = ArcpClient.builder(pair2.client()).bearer("demo").build()) {
             clientB.connect(Duration.ofSeconds(5));
 
             Flow.Publisher<EventBody> events =

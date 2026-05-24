@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 /** Submits a job, streams its events, and prints the assembled final result. */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("emitter", "1.0.0", (input, ctx) -> {
                     ctx.emit(new StatusEvent("starting", null));
@@ -30,9 +30,9 @@ public final class Main {
                     return JobOutcome.Success.inline(input.payload());
                 })
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             Session session = client.connect(Duration.ofSeconds(5));
             assert session.sessionId() != null;
 

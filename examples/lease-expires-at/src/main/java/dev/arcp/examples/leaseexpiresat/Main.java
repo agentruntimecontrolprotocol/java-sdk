@@ -19,16 +19,16 @@ import java.util.concurrent.TimeUnit;
 public final class Main {
     public static void main(String[] args) throws Exception {
         CountDownLatch release = new CountDownLatch(1);
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("idle", "1.0.0", (input, ctx) -> {
                     release.await(5, TimeUnit.SECONDS);
                     return JobOutcome.Success.inline(input.payload());
                 })
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
             Lease lease = Lease.builder().allow("tool.call", "*").build();
             LeaseConstraints constraints = LeaseConstraints.of(

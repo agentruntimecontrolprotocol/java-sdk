@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 public final class Main {
     public static void main(String[] args) throws Exception {
         CountDownLatch hold = new CountDownLatch(1);
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("blocker", "1.0.0", (input, ctx) -> {
                     hold.await();
@@ -25,9 +25,9 @@ public final class Main {
                 .agent("fast", "1.0.0",
                         (input, ctx) -> JobOutcome.Success.inline(input.payload()))
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
             var fast = client.submit(ArcpClient.jobSubmit(
                     "fast@1.0.0", JsonNodeFactory.instance.objectNode()));

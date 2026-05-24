@@ -11,11 +11,13 @@ import dev.arcp.runtime.credentials.IssuedCredential;
 import dev.arcp.runtime.lease.BudgetCounters;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import org.jspecify.annotations.Nullable;
 
 /** Bookkeeping for one in-flight job on the runtime side. */
@@ -59,7 +61,8 @@ public final class JobRecord {
   private final CopyOnWriteArrayList<Subscriber> subscribers = new CopyOnWriteArrayList<>();
   private volatile @Nullable Future<?> worker;
   private volatile @Nullable ScheduledFuture<?> expiryWatchdog;
-  private final CopyOnWriteArrayList<IssuedCredential> credentials = new CopyOnWriteArrayList<>();
+  private final Object credentialsLock = new Object();
+  private final ArrayList<IssuedCredential> credentials = new ArrayList<>();
 
   public JobRecord(
       JobId jobId,
@@ -161,37 +164,52 @@ public final class JobRecord {
         .toList();
   }
 
-  public CopyOnWriteArrayList<Subscriber> subscribers() {
-    return subscribers;
+  public List<Subscriber> subscribers() {
+    return Collections.unmodifiableList(subscribers);
+  }
+
+  public void addSubscriber(Subscriber subscriber) {
+    subscribers.add(subscriber);
+  }
+
+  public boolean removeSubscribersWhere(Predicate<Subscriber> predicate) {
+    return subscribers.removeIf(predicate);
   }
 
   public List<IssuedCredential> credentials() {
-    return List.copyOf(credentials);
+    synchronized (credentialsLock) {
+      return List.copyOf(credentials);
+    }
   }
 
   public void setCredentials(List<IssuedCredential> issued) {
-    credentials.clear();
-    credentials.addAll(issued);
+    synchronized (credentialsLock) {
+      credentials.clear();
+      credentials.addAll(issued);
+    }
   }
 
   public @Nullable IssuedCredential replaceCredential(CredentialId id, IssuedCredential next) {
-    IssuedCredential prior = null;
-    for (int i = 0; i < credentials.size(); i++) {
-      IssuedCredential current = credentials.get(i);
-      if (current.wire().id().equals(id)) {
-        prior = current;
-        credentials.set(i, next);
-        return prior;
+    synchronized (credentialsLock) {
+      for (int i = 0; i < credentials.size(); i++) {
+        IssuedCredential current = credentials.get(i);
+        if (current.wire().id().equals(id)) {
+          IssuedCredential prior = current;
+          credentials.set(i, next);
+          return prior;
+        }
       }
+      credentials.add(next);
+      return null;
     }
-    credentials.add(next);
-    return null;
   }
 
   public List<IssuedCredential> drainCredentials() {
-    List<IssuedCredential> drained = new ArrayList<>(credentials);
-    credentials.clear();
-    return drained;
+    synchronized (credentialsLock) {
+      List<IssuedCredential> drained = new ArrayList<>(credentials);
+      credentials.clear();
+      return drained;
+    }
   }
 
   public record Subscriber(SessionLoop session, JobId jobId) {}

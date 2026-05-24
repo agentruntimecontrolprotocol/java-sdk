@@ -41,9 +41,9 @@ class SubscribeReplayTest {
                 })
             .build();
 
-    MemoryTransport[] pair = MemoryTransport.pair();
-    runtime.accept(pair[0]);
-    try (ArcpClient submitter = ArcpClient.builder(pair[1]).build()) {
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    runtime.accept(pair.runtime());
+    try (ArcpClient submitter = ArcpClient.builder(pair.client()).build()) {
       submitter.connect(Duration.ofSeconds(5));
       JobHandle handle =
           submitter.submit(
@@ -87,8 +87,8 @@ class SubscribeReplayTest {
 
   @Test
   void secondSessionCanReplayCompletedJobHistory() throws Exception {
-    MemoryTransport[] submitPair = MemoryTransport.pair();
-    MemoryTransport[] replayPair = MemoryTransport.pair();
+    MemoryTransport.Pair submitPair = MemoryTransport.pair();
+    MemoryTransport.Pair replayPair = MemoryTransport.pair();
     ArcpRuntime runtime =
         ArcpRuntime.builder()
             .agent(
@@ -100,11 +100,11 @@ class SubscribeReplayTest {
                   return JobOutcome.Success.inline(input.payload());
                 })
             .build();
-    runtime.accept(submitPair[0]);
-    runtime.accept(replayPair[0]);
+    runtime.accept(submitPair.runtime());
+    runtime.accept(replayPair.runtime());
 
     JobHandle handle;
-    try (ArcpClient submitter = ArcpClient.builder(submitPair[1]).bearer("shared").build()) {
+    try (ArcpClient submitter = ArcpClient.builder(submitPair.client()).bearer("shared").build()) {
       submitter.connect(Duration.ofSeconds(5));
       handle =
           submitter.submit(
@@ -113,7 +113,7 @@ class SubscribeReplayTest {
     }
 
     CopyOnWriteArrayList<String> replayed = new CopyOnWriteArrayList<>();
-    try (ArcpClient replayer = ArcpClient.builder(replayPair[1]).bearer("shared").build()) {
+    try (ArcpClient replayer = ArcpClient.builder(replayPair.client()).bearer("shared").build()) {
       replayer.connect(Duration.ofSeconds(5));
       replayer
           .subscribe(handle.jobId(), SubscribeOptions.withHistory(0L))

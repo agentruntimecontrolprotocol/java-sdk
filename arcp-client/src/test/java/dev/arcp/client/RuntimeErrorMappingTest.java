@@ -17,7 +17,7 @@ class RuntimeErrorMappingTest {
 
   @Test
   void permissionDeniedFromAgentAuthorizationReachesClient() throws Exception {
-    MemoryTransport[] pair = MemoryTransport.pair();
+    MemoryTransport.Pair pair = MemoryTransport.pair();
     ArcpRuntime runtime =
         ArcpRuntime.builder()
             .agent(
@@ -28,9 +28,9 @@ class RuntimeErrorMappingTest {
                   return JobOutcome.Success.inline(input.payload());
                 })
             .build();
-    runtime.accept(pair[0]);
+    runtime.accept(pair.runtime());
 
-    try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+    try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
       client.connect(Duration.ofSeconds(5));
       JobHandle handle =
           client.submit(

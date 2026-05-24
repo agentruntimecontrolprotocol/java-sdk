@@ -1,5 +1,6 @@
 package dev.arcp.otel;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.arcp.core.transport.Transport;
 import dev.arcp.core.wire.Envelope;
@@ -176,11 +177,15 @@ public final class ArcpOtel {
         return envelope;
       }
       ObjectNode payload = envelope.payload().deepCopy();
-      ObjectNode ext = (ObjectNode) payload.path("extensions");
-      if (ext.isMissingNode()) {
+      JsonNode existing = payload.path("extensions");
+      ObjectNode ext;
+      if (existing.isMissingNode()) {
         ext = payload.putObject("extensions");
-      } else if (!payload.has("extensions")) {
-        ext = payload.putObject("extensions");
+      } else if (existing.isObject()) {
+        ext = (ObjectNode) existing;
+      } else {
+        // Non-object "extensions" — cannot safely inject; leave envelope unchanged.
+        return envelope;
       }
       ObjectNode otelNode = ext.putObject(EXTENSION_NAME);
       for (var e : carrier.entrySet()) {
@@ -198,11 +203,16 @@ public final class ArcpOtel {
     }
 
     private Context extractTraceContext(Envelope envelope) {
-      ObjectNode ext = (ObjectNode) envelope.payload().path("extensions");
-      if (ext.isMissingNode() || !ext.has(EXTENSION_NAME)) {
+      JsonNode extNode = envelope.payload().path("extensions");
+      if (!extNode.isObject()) {
         return Context.current();
       }
-      ObjectNode otelNode = (ObjectNode) ext.get(EXTENSION_NAME);
+      ObjectNode ext = (ObjectNode) extNode;
+      JsonNode otelRaw = ext.get(EXTENSION_NAME);
+      if (otelRaw == null || !otelRaw.isObject()) {
+        return Context.current();
+      }
+      ObjectNode otelNode = (ObjectNode) otelRaw;
       Map<String, String> carrier = new HashMap<>();
       otelNode.fieldNames().forEachRemaining(k -> carrier.put(k, otelNode.get(k).asText()));
       return propagator.extract(Context.current(), carrier, TextMapGetterImpl.INSTANCE);

@@ -66,8 +66,8 @@ class IdempotencyTest {
   }
 
   private static ArcpClient paired(ArcpRuntime runtime) {
-    MemoryTransport[] pair = MemoryTransport.pair();
-    runtime.accept(pair[0]);
-    return ArcpClient.builder(pair[1]).build();
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    runtime.accept(pair.runtime());
+    return ArcpClient.builder(pair.client()).build();
   }
 }

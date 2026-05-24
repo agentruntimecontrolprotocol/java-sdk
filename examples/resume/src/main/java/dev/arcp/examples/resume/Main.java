@@ -26,13 +26,13 @@ public final class Main {
                         .build();
 
         // First connection: submit a job and capture resume state.
-        MemoryTransport[] pair1 = MemoryTransport.pair();
-        runtime.accept(pair1[0]);
+        MemoryTransport.Pair pair1 = MemoryTransport.pair();
+        runtime.accept(pair1.runtime());
 
         String resumeToken = null;
         long lastSeq = 0L;
 
-        try (ArcpClient client1 = ArcpClient.builder(pair1[1]).build()) {
+        try (ArcpClient client1 = ArcpClient.builder(pair1.client()).build()) {
             client1.connect(Duration.ofSeconds(5));
             JobHandle handle =
                     client1.submit(
@@ -47,10 +47,10 @@ public final class Main {
         }
 
         // Second connection: optionally resume from captured token.
-        MemoryTransport[] pair2 = MemoryTransport.pair();
-        runtime.accept(pair2[0]);
+        MemoryTransport.Pair pair2 = MemoryTransport.pair();
+        runtime.accept(pair2.runtime());
 
-        ArcpClient.Builder builder2 = ArcpClient.builder(pair2[1]);
+        ArcpClient.Builder builder2 = ArcpClient.builder(pair2.client());
         if (resumeToken != null) {
             builder2 = builder2.resumeToken(resumeToken).lastEventSeq(lastSeq);
         }

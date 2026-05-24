@@ -40,8 +40,8 @@ public final class Main {
                         .build();
 
         // --- Client 1: live consumption. ---
-        MemoryTransport[] pair1 = MemoryTransport.pair();
-        runtime.accept(pair1[0]);
+        MemoryTransport.Pair pair1 = MemoryTransport.pair();
+        runtime.accept(pair1.runtime());
 
         String resumeToken = null;
         long lastSeq = 0L;
@@ -49,7 +49,7 @@ public final class Main {
         AtomicInteger firstPassCount = new AtomicInteger();
         CompletableFuture<Void> firstPassDone = new CompletableFuture<>();
 
-        try (ArcpClient client1 = ArcpClient.builder(pair1[1]).bearer("demo").build()) {
+        try (ArcpClient client1 = ArcpClient.builder(pair1.client()).bearer("demo").build()) {
             client1.connect(Duration.ofSeconds(5));
 
             JobHandle handle =
@@ -95,13 +95,13 @@ public final class Main {
         int firstCount = firstPassCount.get();
 
         // --- Client 2: replay via history subscription. ---
-        MemoryTransport[] pair2 = MemoryTransport.pair();
-        runtime.accept(pair2[0]);
+        MemoryTransport.Pair pair2 = MemoryTransport.pair();
+        runtime.accept(pair2.runtime());
 
         AtomicInteger replayCount = new AtomicInteger();
         CompletableFuture<Void> replayDone = new CompletableFuture<>();
 
-        ArcpClient.Builder builder2 = ArcpClient.builder(pair2[1]).bearer("demo");
+        ArcpClient.Builder builder2 = ArcpClient.builder(pair2.client()).bearer("demo");
         if (resumeToken != null) {
             builder2 = builder2.resumeToken(resumeToken).lastEventSeq(lastSeq);
         }

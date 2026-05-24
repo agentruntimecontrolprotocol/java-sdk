@@ -6,9 +6,11 @@ import dev.arcp.core.wire.ArcpMapper;
 import dev.arcp.core.wire.Envelope;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
+import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -21,11 +23,14 @@ final class SpringWebSocketTransport implements Transport {
   private final WebSocketSession session;
   private final ObjectMapper mapper;
   private final SubmissionPublisher<Envelope> inbound;
+  private final ExecutorService inboundExecutor;
+  private final ReentrantLock writeLock = new ReentrantLock();
 
   SpringWebSocketTransport(WebSocketSession session, ObjectMapper mapper) {
     this.session = session;
     this.mapper = mapper != null ? mapper : ArcpMapper.shared();
-    this.inbound = new SubmissionPublisher<>(Executors.newVirtualThreadPerTaskExecutor(), 1024);
+    this.inboundExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    this.inbound = new SubmissionPublisher<>(inboundExecutor, 1024);
   }
 
   void deliver(String frame) {
@@ -46,10 +51,13 @@ final class SpringWebSocketTransport implements Transport {
 
   @Override
   public void send(Envelope envelope) {
+    writeLock.lock();
     try {
       session.sendMessage(new TextMessage(mapper.writeValueAsString(envelope)));
     } catch (IOException e) {
       throw new UncheckedIOException(e);
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -66,5 +74,6 @@ final class SpringWebSocketTransport implements Transport {
       // best-effort close
     }
     inbound.close();
+    inboundExecutor.shutdown();
   }
 }
