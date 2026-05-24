@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 public final class Main {
     public static void main(String[] args) throws Exception {
         ResultId resultId = ResultId.of("res_chunked");
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("chunked", "1.0.0", (input, ctx) -> {
                     ctx.emit(new ResultChunkEvent(resultId, 0, "hello ", "utf8", true));
@@ -29,9 +29,9 @@ public final class Main {
                     return JobOutcome.Success.streamed(resultId, 18, "3 chunks");
                 })
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
             JobHandle handle = client.submit(ArcpClient.jobSubmit(
                     "chunked@1.0.0", JsonNodeFactory.instance.objectNode()));

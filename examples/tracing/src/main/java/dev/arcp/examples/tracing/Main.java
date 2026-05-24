@@ -36,7 +36,7 @@ public final class Main {
                         .build()
                         .getTracer("arcp-example-tracing");
 
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime =
                 ArcpRuntime.builder()
                         .agent(
@@ -44,10 +44,10 @@ public final class Main {
                                 "1.0.0",
                                 (input, ctx) -> JobOutcome.Success.inline(input.payload()))
                         .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
         // Wrap the client-side transport with OTel tracing.
-        Transport tracingTransport = ArcpOtel.withTracing(pair[1], tracer);
+        Transport tracingTransport = ArcpOtel.withTracing(pair.client(), tracer);
 
         try (ArcpClient client = ArcpClient.builder(tracingTransport).build()) {
             client.connect(Duration.ofSeconds(5));

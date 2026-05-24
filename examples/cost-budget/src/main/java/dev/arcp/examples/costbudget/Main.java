@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 /** Tracks a USD budget; agent over-spends and surfaces BUDGET_EXHAUSTED. */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("spender", "1.0.0", (input, ctx) -> {
                     // Spend over budget by accumulating cost.inference metrics.
@@ -30,9 +30,9 @@ public final class Main {
                     return JobOutcome.Success.inline(input.payload());
                 })
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
             Lease lease = Lease.builder()
                     .allow("tool.call", "*")

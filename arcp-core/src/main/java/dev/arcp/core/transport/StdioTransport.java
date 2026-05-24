@@ -13,6 +13,7 @@ import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
@@ -49,6 +50,7 @@ public final class StdioTransport implements Transport {
   private final ReentrantLock writeLock = new ReentrantLock();
   private final BufferedReader reader;
   private final SubmissionPublisher<Envelope> inbound;
+  private final ExecutorService inboundExecutor;
   private final Thread readerThread;
   private volatile boolean closed;
 
@@ -64,7 +66,8 @@ public final class StdioTransport implements Transport {
     this.reader =
         new BufferedReader(
             new InputStreamReader(Objects.requireNonNull(in, "in"), StandardCharsets.UTF_8));
-    this.inbound = new SubmissionPublisher<>(Executors.newVirtualThreadPerTaskExecutor(), 1024);
+    this.inboundExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    this.inbound = new SubmissionPublisher<>(inboundExecutor, 1024);
     this.readerThread = Thread.ofVirtual().name("arcp-stdio-reader").unstarted(this::readLoop);
   }
 
@@ -137,6 +140,7 @@ public final class StdioTransport implements Transport {
       // best-effort close
     }
     inbound.close();
+    inboundExecutor.shutdown();
     readerThread.interrupt();
   }
 }

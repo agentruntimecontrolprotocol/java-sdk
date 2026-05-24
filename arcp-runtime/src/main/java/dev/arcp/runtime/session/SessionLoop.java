@@ -91,7 +91,8 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   private final AgentRegistry agents;
   private final String pendingId = "pending:" + UUID.randomUUID();
 
-  private volatile Phase phase = Phase.AWAITING_HELLO;
+  private final java.util.concurrent.atomic.AtomicReference<Phase> phase =
+      new java.util.concurrent.atomic.AtomicReference<>(Phase.AWAITING_HELLO);
   private volatile @Nullable SessionId sessionId;
   private volatile @Nullable Principal principal;
   private volatile Set<Feature> negotiated = EnumSet.noneOf(Feature.class);
@@ -129,6 +130,11 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     return s == null ? pendingId : s.value();
   }
 
+  /** Stable key used at session insertion time; never flips even after handshake. */
+  public String pendingKey() {
+    return pendingId;
+  }
+
   public void start() {
     transport.incoming().subscribe(this);
   }
@@ -160,10 +166,9 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   }
 
   public void shutdown(String reason) {
-    if (phase == Phase.CLOSED) {
+    if (phase.getAndSet(Phase.CLOSED) == Phase.CLOSED) {
       return;
     }
-    phase = Phase.CLOSED;
     ScheduledFuture<?> hb = heartbeatTick;
     if (hb != null) {
       hb.cancel(false);
@@ -195,7 +200,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   }
 
   private void handle(Envelope envelope) {
-    Phase p = phase;
+    Phase p = phase.get();
     Message m;
     try {
       m = Messages.decode(mapper, envelope);
@@ -246,7 +251,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       this.resumeToken = UUID.randomUUID().toString();
       this.negotiated =
           Capabilities.intersect(hello.capabilities().features(), runtime.advertised());
-      this.phase = Phase.ACTIVE;
+      this.phase.set(Phase.ACTIVE);
 
       Capabilities welcomeCaps = new Capabilities(List.of("json"), negotiated, agents.describe());
       SessionWelcome welcome =
@@ -295,7 +300,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   }
 
   private void tickHeartbeat(Duration interval) {
-    if (phase != Phase.ACTIVE) {
+    if (phase.get() != Phase.ACTIVE) {
       return;
     }
     if (heartbeat.shouldClose(interval)) {
@@ -340,6 +345,10 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             .filter(
                 rec ->
                     filter.createdAfter() == null || rec.createdAt().isAfter(filter.createdAfter()))
+            // Deterministic order: createdAt then jobId for ties.
+            .sorted(
+                java.util.Comparator.comparing((JobRecord rec) -> rec.createdAt())
+                    .thenComparing(rec -> rec.jobId().value()))
             .map(
                 rec ->
                     new JobSummary(
@@ -352,7 +361,34 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
                         rec.traceId(),
                         rec.lastEventSeq()))
             .toList();
-    SessionJobs response = new SessionJobs(requestId, matching, null);
+
+    int startIndex = 0;
+    if (req.cursor() != null && !req.cursor().isBlank()) {
+      try {
+        byte[] decoded = java.util.Base64.getUrlDecoder().decode(req.cursor());
+        startIndex = Integer.parseInt(new String(decoded, java.nio.charset.StandardCharsets.UTF_8));
+        if (startIndex < 0) {
+          startIndex = 0;
+        }
+      } catch (IllegalArgumentException e) {
+        sendJobErrorTopLevel(null, ErrorCode.INVALID_REQUEST, "invalid list_jobs cursor");
+        return;
+      }
+    }
+    int limit = req.limit() != null && req.limit() > 0 ? req.limit() : matching.size();
+    int endIndex = Math.min(matching.size(), startIndex + limit);
+    List<JobSummary> page =
+        startIndex >= matching.size()
+            ? List.of()
+            : List.copyOf(matching.subList(startIndex, endIndex));
+    String nextCursor =
+        endIndex < matching.size()
+            ? java.util.Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(
+                    Integer.toString(endIndex).getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            : null;
+    SessionJobs response = new SessionJobs(requestId, page, nextCursor);
     send(Message.Type.SESSION_JOBS, response, sessionId, null, null, null);
   }
 
@@ -373,14 +409,14 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       }
     }
 
-    // §7.2: idempotency. Identical (principal, key, payload) returns the prior job_id.
+    // §7.2: idempotency. Identical (principal, key, full-submit fingerprint) returns prior job_id.
     String idempotencyKey = submit.idempotencyKey();
     if (idempotencyKey != null) {
-      int payloadHash = submit.input().hashCode() ^ submit.agent().wire().hashCode();
+      String fingerprint = idempotencyFingerprint(submit);
       JobId fresh = JobId.generate();
-      var conflict = runtime.idempotency().claim(pr, idempotencyKey, payloadHash, fresh);
+      var conflict = runtime.idempotency().claim(pr, idempotencyKey, fingerprint, fresh);
       if (conflict != null) {
-        if (runtime.idempotency().matchesPayload(pr, idempotencyKey, payloadHash)) {
+        if (runtime.idempotency().matchesPayload(pr, idempotencyKey, fingerprint)) {
           JobRecord prior = runtime.job(conflict.existing());
           if (prior != null) {
             emitReplayAccepted(prior, envelope.traceId());
@@ -397,6 +433,41 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       return;
     }
     acceptJob(envelope, submit, pr, now, JobId.generate());
+  }
+
+  /**
+   * Build a collision-resistant fingerprint over the semantically meaningful {@link JobSubmit}
+   * fields: agent, input, lease_request, lease_constraints, max_runtime_sec. The serialization is
+   * canonical (alphabetically sorted keys) so that semantically equal payloads always produce the
+   * same fingerprint and the comparison in {@link
+   * dev.arcp.runtime.idempotency.IdempotencyStore#matchesPayload} is robust to key-order changes.
+   */
+  private String idempotencyFingerprint(JobSubmit submit) {
+    try {
+      ObjectMapper canonical = mapper.copy();
+      canonical.configure(
+          com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+      canonical.setNodeFactory(
+          com.fasterxml.jackson.databind.node.JsonNodeFactory.withExactBigDecimals(true));
+      ObjectNode canon = canonical.createObjectNode();
+      canon.put("agent", submit.agent().wire());
+      canon.set("input", canonical.valueToTree(submit.input()));
+      if (submit.leaseRequest() != null) {
+        canon.set("lease_request", canonical.valueToTree(submit.leaseRequest()));
+      }
+      if (submit.leaseConstraints() != null) {
+        canon.set("lease_constraints", canonical.valueToTree(submit.leaseConstraints()));
+      }
+      if (submit.maxRuntimeSec() != null) {
+        canon.put("max_runtime_sec", submit.maxRuntimeSec());
+      }
+      byte[] bytes = canonical.writerWithDefaultPrettyPrinter().writeValueAsBytes(canon);
+      java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+      return java.util.HexFormat.of().formatHex(md.digest(bytes));
+    } catch (com.fasterxml.jackson.core.JsonProcessingException
+        | java.security.NoSuchAlgorithmException e) {
+      throw new IllegalStateException("idempotency fingerprint failure", e);
+    }
   }
 
   private void emitReplayAccepted(JobRecord prior, @Nullable TraceId traceId) {
@@ -535,7 +606,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
           public boolean cancelled() {
             return Thread.currentThread().isInterrupted()
                 || record.status() == JobRecord.Status.CANCELLED
-                || phase == Phase.CLOSED;
+                || phase.get() == Phase.CLOSED;
           }
 
           @Override
@@ -680,7 +751,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
       @Override
       public boolean cancelled() {
-        return record.status().terminal() || phase == Phase.CLOSED;
+        return record.status().terminal() || phase.get() == Phase.CLOSED;
       }
 
       @Override
@@ -726,7 +797,11 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
           null, ErrorCode.JOB_NOT_FOUND, "job not found or not visible: " + sub.jobId());
       return;
     }
-    rec.subscribers().add(new JobRecord.Subscriber(this, rec.jobId()));
+    boolean alreadySubscribed =
+        rec.subscribers().stream().anyMatch(s -> s.session() == this && s.jobId().equals(rec.jobId()));
+    if (!alreadySubscribed) {
+      rec.addSubscriber(new JobRecord.Subscriber(this, rec.jobId()));
+    }
     boolean wantHistory = Boolean.TRUE.equals(sub.history());
     long subscribedFrom = sub.fromEventSeq() != null ? sub.fromEventSeq() : 0;
     long now = eventSeq.get();
@@ -757,7 +832,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   private void handleUnsubscribe(JobUnsubscribe unsub) {
     JobRecord rec = runtime.job(unsub.jobId());
     if (rec != null) {
-      rec.subscribers().removeIf(s -> s.session() == this);
+      rec.removeSubscribersWhere(s -> s.session() == this);
     }
   }
 
@@ -809,7 +884,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       @Nullable TraceId tid,
       @Nullable JobId jid,
       @Nullable Long seq) {
-    if (phase == Phase.CLOSED) {
+    if (phase.get() == Phase.CLOSED) {
       return null;
     }
     ObjectNode payloadJson = Messages.encodePayload(mapper, payload);
@@ -841,6 +916,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   }
 
   public Phase phase() {
-    return phase;
+    return phase.get();
   }
 }

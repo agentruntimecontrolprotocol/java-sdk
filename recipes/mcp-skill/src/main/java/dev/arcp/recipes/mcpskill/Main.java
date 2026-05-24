@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime =
                 ArcpRuntime.builder()
                         .agent(
@@ -42,11 +42,11 @@ public final class Main {
                                                     .put("tempC", 22));
                                 })
                         .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
         CompletableFuture<ThoughtEvent> thoughtReceived = new CompletableFuture<>();
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
 
             // Lease allows only the mcp:weather tool call.

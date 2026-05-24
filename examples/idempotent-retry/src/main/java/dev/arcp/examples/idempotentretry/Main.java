@@ -13,14 +13,14 @@ import java.time.Duration;
 /** Submits the same job twice with the same idempotency_key; second returns same job_id. */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("report", "1.0.0",
                         (input, ctx) -> JobOutcome.Success.inline(input.payload()))
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
             ObjectNode payload = JsonNodeFactory.instance.objectNode();
             payload.put("week", 19);

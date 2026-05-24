@@ -14,10 +14,12 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,15 +33,23 @@ public final class WebSocketTransport implements Transport {
 
   private static final Logger log = LoggerFactory.getLogger(WebSocketTransport.class);
 
-  private final WebSocket socket;
+  private volatile @Nullable WebSocket socket;
   private final ObjectMapper mapper;
   private final SubmissionPublisher<Envelope> inbound;
+  private final ExecutorService inboundExecutor;
   private final StringBuilder partial = new StringBuilder();
+  private final ReentrantLock writeLock = new ReentrantLock();
+  private final @Nullable HttpClient ownedHttpClient;
 
-  private WebSocketTransport(WebSocket socket, ObjectMapper mapper) {
-    this.socket = socket;
+  private WebSocketTransport(ObjectMapper mapper, @Nullable HttpClient ownedHttpClient) {
     this.mapper = mapper;
-    this.inbound = new SubmissionPublisher<>(Executors.newVirtualThreadPerTaskExecutor(), 1024);
+    this.ownedHttpClient = ownedHttpClient;
+    this.inboundExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    this.inbound = new SubmissionPublisher<>(inboundExecutor, 1024);
+  }
+
+  void attachSocket(WebSocket socket) {
+    this.socket = socket;
   }
 
   /** Open a WebSocket connection to {@code uri} and return a connected transport. */
@@ -51,11 +61,11 @@ public final class WebSocketTransport implements Transport {
       URI uri, Map<String, String> headers, ObjectMapper mapper, Duration timeout)
       throws InterruptedException {
     HttpClient httpClient = HttpClient.newHttpClient();
+    WebSocketTransport transport = new WebSocketTransport(mapper, httpClient);
     WebSocket.Builder builder = httpClient.newWebSocketBuilder();
     for (var entry : headers.entrySet()) {
       builder.header(entry.getKey(), entry.getValue());
     }
-    var futureSocket = new java.util.concurrent.atomic.AtomicReference<WebSocketTransport>();
     CompletableFuture<WebSocket> stage =
         builder.buildAsync(
             uri,
@@ -68,10 +78,7 @@ public final class WebSocketTransport implements Transport {
               @Override
               public @Nullable CompletionStage<?> onText(
                   WebSocket webSocket, CharSequence data, boolean last) {
-                WebSocketTransport t = futureSocket.get();
-                if (t != null) {
-                  t.handleText(data, last);
-                }
+                transport.handleText(data, last);
                 webSocket.request(1);
                 return null;
               }
@@ -79,19 +86,13 @@ public final class WebSocketTransport implements Transport {
               @Override
               public @Nullable CompletionStage<?> onClose(
                   WebSocket webSocket, int statusCode, String reason) {
-                WebSocketTransport t = futureSocket.get();
-                if (t != null) {
-                  t.inbound.close();
-                }
+                transport.inbound.close();
                 return null;
               }
 
               @Override
               public void onError(WebSocket webSocket, Throwable error) {
-                WebSocketTransport t = futureSocket.get();
-                if (t != null) {
-                  t.inbound.closeExceptionally(error);
-                }
+                transport.inbound.closeExceptionally(error);
               }
             });
     WebSocket ws;
@@ -100,12 +101,21 @@ public final class WebSocketTransport implements Transport {
     } catch (java.util.concurrent.ExecutionException e) {
       Throwable cause =
           e.getCause() instanceof CompletionException ce ? ce.getCause() : e.getCause();
+      try {
+        httpClient.close();
+      } catch (RuntimeException ignored) {
+        // best-effort
+      }
       throw new IllegalStateException("WebSocket connect failed: " + cause, cause);
     } catch (java.util.concurrent.TimeoutException e) {
+      try {
+        httpClient.close();
+      } catch (RuntimeException ignored) {
+        // best-effort
+      }
       throw new IllegalStateException("WebSocket connect timed out", e);
     }
-    WebSocketTransport transport = new WebSocketTransport(ws, mapper);
-    futureSocket.set(transport);
+    transport.attachSocket(ws);
     return transport;
   }
 
@@ -126,9 +136,14 @@ public final class WebSocketTransport implements Transport {
 
   @Override
   public void send(Envelope envelope) {
+    WebSocket ws = socket;
+    if (ws == null) {
+      throw new IllegalStateException("WebSocketTransport.send called before socket attached");
+    }
+    writeLock.lock();
     try {
       String json = mapper.writeValueAsString(envelope);
-      socket.sendText(json, true).get(5, TimeUnit.SECONDS);
+      ws.sendText(json, true).get(5, TimeUnit.SECONDS);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     } catch (InterruptedException e) {
@@ -136,6 +151,8 @@ public final class WebSocketTransport implements Transport {
       throw new IllegalStateException("interrupted while sending", e);
     } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException e) {
       throw new IllegalStateException("send failed", e);
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -146,14 +163,25 @@ public final class WebSocketTransport implements Transport {
 
   @Override
   public void close() {
-    try {
-      socket.sendClose(WebSocket.NORMAL_CLOSURE, "bye").get(2, TimeUnit.SECONDS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    } catch (java.util.concurrent.ExecutionException
-        | java.util.concurrent.TimeoutException ignored) {
-      // best-effort close
+    WebSocket ws = socket;
+    if (ws != null) {
+      try {
+        ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye").get(2, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      } catch (java.util.concurrent.ExecutionException
+          | java.util.concurrent.TimeoutException ignored) {
+        // best-effort close
+      }
     }
     inbound.close();
+    inboundExecutor.shutdown();
+    if (ownedHttpClient != null) {
+      try {
+        ownedHttpClient.close();
+      } catch (RuntimeException ignored) {
+        // best-effort
+      }
+    }
   }
 }

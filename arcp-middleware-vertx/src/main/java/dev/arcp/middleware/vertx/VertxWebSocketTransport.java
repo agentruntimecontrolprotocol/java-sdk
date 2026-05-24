@@ -8,9 +8,11 @@ import io.vertx.core.http.ServerWebSocket;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
+import java.util.concurrent.locks.ReentrantLock;
 
 /** Bridges a Vert.x {@link ServerWebSocket} to the ARCP {@link Transport} SPI. */
 final class VertxWebSocketTransport implements Transport {
@@ -18,11 +20,14 @@ final class VertxWebSocketTransport implements Transport {
   private final ServerWebSocket socket;
   private final ObjectMapper mapper;
   private final SubmissionPublisher<Envelope> inbound;
+  private final ExecutorService inboundExecutor;
+  private final ReentrantLock writeLock = new ReentrantLock();
 
   VertxWebSocketTransport(ServerWebSocket socket, ObjectMapper mapper) {
     this.socket = Objects.requireNonNull(socket, "socket");
     this.mapper = mapper != null ? mapper : ArcpMapper.shared();
-    this.inbound = new SubmissionPublisher<>(Executors.newVirtualThreadPerTaskExecutor(), 1024);
+    this.inboundExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    this.inbound = new SubmissionPublisher<>(inboundExecutor, 1024);
   }
 
   void deliver(String frame) {
@@ -43,11 +48,14 @@ final class VertxWebSocketTransport implements Transport {
 
   @Override
   public void send(Envelope envelope) {
+    writeLock.lock();
     try {
       String json = mapper.writeValueAsString(envelope);
       socket.writeTextMessage(json);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -60,5 +68,6 @@ final class VertxWebSocketTransport implements Transport {
   public void close() {
     socket.close();
     inbound.close();
+    inboundExecutor.shutdown();
   }
 }

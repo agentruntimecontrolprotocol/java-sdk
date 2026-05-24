@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime =
                 ArcpRuntime.builder()
                         .agent(
@@ -60,7 +60,7 @@ public final class Main {
                                                     .put("agent", "expensive"));
                                 })
                         .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
         // Lease: allow all tool calls but cap total spend at USD 5.00.
         Lease lease =
@@ -69,7 +69,7 @@ public final class Main {
                         .allow("cost.budget", "USD:5.00")
                         .build();
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
             client.connect(Duration.ofSeconds(5));
 
             // Cheap agent (USD 1.00) should succeed within budget.

@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class Main {
     public static void main(String[] args) throws Exception {
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .agent("ticker", "1.0.0", (input, ctx) -> {
                     for (int i = 1; i <= 20; i++) {
@@ -30,11 +30,11 @@ public final class Main {
                     return JobOutcome.Success.inline(input.payload());
                 })
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
         AtomicInteger received = new AtomicInteger();
 
-        try (ArcpClient client = ArcpClient.builder(pair[1])
+        try (ArcpClient client = ArcpClient.builder(pair.client())
                 .autoAck(false)
                 .features(EnumSet.allOf(Feature.class))
                 .build()) {

@@ -8,9 +8,11 @@ import jakarta.websocket.Session;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,11 +27,14 @@ final class WebSocketJsonTransport implements Transport {
   private final Session session;
   private final ObjectMapper mapper;
   private final SubmissionPublisher<Envelope> inbound;
+  private final ExecutorService inboundExecutor;
+  private final ReentrantLock writeLock = new ReentrantLock();
 
   WebSocketJsonTransport(Session session, ObjectMapper mapper) {
     this.session = Objects.requireNonNull(session, "session");
     this.mapper = mapper != null ? mapper : ArcpMapper.shared();
-    this.inbound = new SubmissionPublisher<>(Executors.newVirtualThreadPerTaskExecutor(), 1024);
+    this.inboundExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    this.inbound = new SubmissionPublisher<>(inboundExecutor, 1024);
   }
 
   void deliver(String frame) {
@@ -51,11 +56,14 @@ final class WebSocketJsonTransport implements Transport {
 
   @Override
   public void send(Envelope envelope) {
+    writeLock.lock();
     try {
       String json = mapper.writeValueAsString(envelope);
       session.getBasicRemote().sendText(json);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -72,5 +80,6 @@ final class WebSocketJsonTransport implements Transport {
       // best-effort close
     }
     inbound.close();
+    inboundExecutor.shutdown();
   }
 }

@@ -139,7 +139,6 @@ works" is decomposed into multiple binary rows.
 
 - HTTP/2 + QUIC transports
 - mTLS / OAuth2 auth schemes
-- stdio newline-delimited JSON transport (`MemoryTransport` covers in-process use)
 - §15.6 trust elevation
 - Quarkus and Helidon middleware (Phase 5 deferred them; `arcp-runtime-jetty`,
   `arcp-middleware-jakarta`, `arcp-middleware-spring-boot`, and

@@ -42,7 +42,7 @@ public final class Main {
             return new Principal(body);
         };
 
-        MemoryTransport[] pair = MemoryTransport.pair();
+        MemoryTransport.Pair pair = MemoryTransport.pair();
         ArcpRuntime runtime = ArcpRuntime.builder()
                 .verifier(verifier)
                 .agent("whoami", "1.0.0",
@@ -50,9 +50,9 @@ public final class Main {
                                 JsonNodeFactory.instance.objectNode()
                                         .put("session", input.sessionId().value())))
                 .build();
-        runtime.accept(pair[0]);
+        runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair[1]).bearer(validToken).build()) {
+        try (ArcpClient client = ArcpClient.builder(pair.client()).bearer(validToken).build()) {
             Session session = client.connect(Duration.ofSeconds(5));
             assert session.sessionId() != null;
             System.out.println("OK custom-auth");

@@ -5,6 +5,10 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 public record Page<T>(List<T> items, @Nullable String nextCursor) {
+  public Page {
+    items = items == null ? List.of() : List.copyOf(items);
+  }
+
   public static Page<JobSummary> empty() {
     return new Page<>(List.of(), null);
   }

@@ -42,7 +42,9 @@ public final class ArcpRuntime implements AutoCloseable {
   private final int resumeBufferCapacity;
   private final Clock clock;
   private final ExecutorService workerPool;
+  private final boolean ownedWorkerPool;
   private final ScheduledExecutorService scheduler;
+  private final boolean ownedScheduler;
   private final String runtimeName;
   private final String runtimeVersion;
   private final IdempotencyStore idempotency;
@@ -68,25 +70,35 @@ public final class ArcpRuntime implements AutoCloseable {
     this.resumeWindowSec = b.resumeWindowSec;
     this.resumeBufferCapacity = b.resumeBufferCapacity;
     this.clock = b.clock != null ? b.clock : Clock.systemUTC();
-    this.workerPool =
-        b.workerPool != null ? b.workerPool : Executors.newVirtualThreadPerTaskExecutor();
-    this.scheduler =
-        b.scheduler != null
-            ? b.scheduler
-            : Executors.newScheduledThreadPool(
-                1,
-                r ->
-                    Thread.ofPlatform()
-                        .name("arcp-runtime-scheduler", 0)
-                        .daemon(true)
-                        .unstarted(r));
+    if (b.workerPool != null) {
+      this.workerPool = b.workerPool;
+      this.ownedWorkerPool = false;
+    } else {
+      this.workerPool = Executors.newVirtualThreadPerTaskExecutor();
+      this.ownedWorkerPool = true;
+    }
+    if (b.scheduler != null) {
+      this.scheduler = b.scheduler;
+      this.ownedScheduler = false;
+    } else {
+      this.scheduler =
+          Executors.newScheduledThreadPool(
+              1,
+              r ->
+                  Thread.ofPlatform()
+                      .name("arcp-runtime-scheduler", 0)
+                      .daemon(true)
+                      .unstarted(r));
+      this.ownedScheduler = true;
+    }
     this.runtimeName = b.runtimeName;
     this.runtimeVersion = b.runtimeVersion;
-    this.idempotency = new IdempotencyStore(this.clock, b.idempotencyTtl);
+    this.idempotency =
+        new IdempotencyStore(this.clock, b.idempotencyTtl, this.scheduler, Duration.ofMinutes(1));
   }
 
   private static Set<Feature> effectiveFeatures(Builder b) {
-    EnumSet<Feature> features = EnumSet.copyOf(b.advertised);
+    EnumSet<Feature> features = safeFeatureCopy(b.advertised);
     boolean hasProvisioner =
         b.credentialProvisioner != null
             && b.credentialProvisioner != NoopCredentialProvisioner.INSTANCE;
@@ -98,7 +110,14 @@ public final class ArcpRuntime implements AutoCloseable {
       features.remove(Feature.MODEL_USE);
       features.remove(Feature.PROVISIONED_CREDENTIALS);
     }
-    return features;
+    return java.util.Collections.unmodifiableSet(features);
+  }
+
+  static EnumSet<Feature> safeFeatureCopy(Set<Feature> features) {
+    if (features == null || features.isEmpty()) {
+      return EnumSet.noneOf(Feature.class);
+    }
+    return EnumSet.copyOf(features);
   }
 
   public static Builder builder() {
@@ -109,7 +128,10 @@ public final class ArcpRuntime implements AutoCloseable {
   public SessionLoop accept(Transport transport) {
     SessionLoop loop = new SessionLoop(this, transport);
     loop.start();
-    sessions.put(loop.idOrPending(), loop);
+    // Always key by the stable pending id, not idOrPending() — the latter flips to the
+    // real session id after handshake and would leave the map keyed by a now-orphaned
+    // string, so removeSession would never find the entry (#23).
+    sessions.put(loop.pendingKey(), loop);
     return loop;
   }
 
@@ -190,6 +212,10 @@ public final class ArcpRuntime implements AutoCloseable {
   }
 
   public void removeSession(SessionLoop loop) {
+    // Always remove via the pending key the loop was inserted under, since
+    // idOrPending() flips to the real session id after handshake and would
+    // otherwise leak the closed session in the map (#23).
+    sessions.remove(loop.pendingKey(), loop);
     sessions.remove(loop.idOrPending(), loop);
   }
 
@@ -199,8 +225,13 @@ public final class ArcpRuntime implements AutoCloseable {
       loop.shutdown("runtime closing");
     }
     sessions.clear();
-    scheduler.shutdownNow();
-    workerPool.shutdown();
+    idempotency.close();
+    if (ownedScheduler) {
+      scheduler.shutdownNow();
+    }
+    if (ownedWorkerPool) {
+      workerPool.shutdown();
+    }
   }
 
   public static final class Builder {
@@ -244,7 +275,7 @@ public final class ArcpRuntime implements AutoCloseable {
     }
 
     public Builder features(Set<Feature> features) {
-      this.advertised = EnumSet.copyOf(features);
+      this.advertised = safeFeatureCopy(features);
       this.featuresConfigured = true;
       return this;
     }

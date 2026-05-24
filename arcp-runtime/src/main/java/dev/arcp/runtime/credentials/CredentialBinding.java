@@ -11,6 +11,7 @@ import dev.arcp.runtime.session.JobRecord;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,11 +88,28 @@ public final class CredentialBinding {
         provisioner.revoke(id).join();
         store.markRevoked(id);
         return;
-      } catch (RuntimeException e) {
+      } catch (CompletionException e) {
+        Throwable cause = e.getCause() != null ? e.getCause() : e;
         if (attempt == MAX_REVOKE_ATTEMPTS) {
-          log.warn("credential revoke failed after {} attempts for {}", attempt, id);
+          log.warn(
+              "credential revoke failed after {} attempts for {}", attempt, id, cause);
+          store.markRevocationFailed(id, cause);
           return;
         }
+        log.debug("credential revoke attempt {} failed for {}", attempt, id, cause);
+      } catch (RuntimeException e) {
+        if (attempt == MAX_REVOKE_ATTEMPTS) {
+          log.warn("credential revoke failed after {} attempts for {}", attempt, id, e);
+          store.markRevocationFailed(id, e);
+          return;
+        }
+        log.debug("credential revoke attempt {} failed for {}", attempt, id, e);
+      }
+      try {
+        Thread.sleep(100L * attempt);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        return;
       }
     }
   }
