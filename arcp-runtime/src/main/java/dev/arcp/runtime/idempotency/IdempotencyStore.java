@@ -92,8 +92,8 @@ public final class IdempotencyStore implements AutoCloseable {
 
   /**
    * Evict entries older than {@code ttl}. Exposed for deterministic test control; the scheduled
-   * background task invokes this method automatically when a scheduler was supplied at
-   * construction time.
+   * background task invokes this method automatically when a scheduler was supplied at construction
+   * time.
    */
   public void prune() {
     Instant now = clock.instant();

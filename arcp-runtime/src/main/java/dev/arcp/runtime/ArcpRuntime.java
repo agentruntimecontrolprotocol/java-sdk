@@ -84,11 +84,7 @@ public final class ArcpRuntime implements AutoCloseable {
       this.scheduler =
           Executors.newScheduledThreadPool(
               1,
-              r ->
-                  Thread.ofPlatform()
-                      .name("arcp-runtime-scheduler", 0)
-                      .daemon(true)
-                      .unstarted(r));
+              r -> Thread.ofPlatform().name("arcp-runtime-scheduler", 0).daemon(true).unstarted(r));
       this.ownedScheduler = true;
     }
     this.runtimeName = b.runtimeName;

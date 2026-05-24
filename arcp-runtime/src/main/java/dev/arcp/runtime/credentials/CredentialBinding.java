@@ -91,8 +91,7 @@ public final class CredentialBinding {
       } catch (CompletionException e) {
         Throwable cause = e.getCause() != null ? e.getCause() : e;
         if (attempt == MAX_REVOKE_ATTEMPTS) {
-          log.warn(
-              "credential revoke failed after {} attempts for {}", attempt, id, cause);
+          log.warn("credential revoke failed after {} attempts for {}", attempt, id, cause);
           store.markRevocationFailed(id, cause);
           return;
         }

@@ -13,6 +13,7 @@ allprojects {
 
 subprojects {
     plugins.withId("java-library") {
+        apply(plugin = "jacoco")
         extensions.configure<JavaPluginExtension> {
             toolchain {
                 languageVersion.set(JavaLanguageVersion.of(21))
@@ -34,6 +35,14 @@ subprojects {
         }
         tasks.withType<Test>().configureEach {
             useJUnitPlatform()
+            finalizedBy("jacocoTestReport")
+        }
+        tasks.withType<JacocoReport>().configureEach {
+            dependsOn("test")
+            reports {
+                xml.required.set(true)
+                html.required.set(true)
+            }
         }
         tasks.withType<Javadoc>().configureEach {
             (options as? StandardJavadocDocletOptions)?.apply {

@@ -798,7 +798,8 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       return;
     }
     boolean alreadySubscribed =
-        rec.subscribers().stream().anyMatch(s -> s.session() == this && s.jobId().equals(rec.jobId()));
+        rec.subscribers().stream()
+            .anyMatch(s -> s.session() == this && s.jobId().equals(rec.jobId()));
     if (!alreadySubscribed) {
       rec.addSubscriber(new JobRecord.Subscriber(this, rec.jobId()));
     }

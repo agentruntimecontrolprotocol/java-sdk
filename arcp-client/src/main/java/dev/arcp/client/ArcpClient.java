@@ -99,6 +99,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<JobId, ExecutorService> liveExecutors = new ConcurrentHashMap<>();
   private final boolean ownedScheduler;
+
   // Reserved for future use by tests asserting FIFO insertion order of pending submits.
   @SuppressWarnings("unused")
   private final ConcurrentLinkedDeque<MessageId> pendingSubmitOrder = new ConcurrentLinkedDeque<>();
@@ -127,8 +128,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
       this.scheduler =
           Executors.newScheduledThreadPool(
               1,
-              r ->
-                  Thread.ofPlatform().name("arcp-client-scheduler", 0).daemon(true).unstarted(r));
+              r -> Thread.ofPlatform().name("arcp-client-scheduler", 0).daemon(true).unstarted(r));
       this.ownedScheduler = true;
     }
     this.resumeToken = b.resumeToken;
@@ -256,13 +256,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     }
     if (!closed) {
       try {
-        send(
-            Message.Type.JOB_UNSUBSCRIBE,
-            new JobUnsubscribe(jobId),
-            sessionId,
-            null,
-            jobId,
-            null);
+        send(Message.Type.JOB_UNSUBSCRIBE, new JobUnsubscribe(jobId), sessionId, null, jobId, null);
       } catch (RuntimeException ignored) {
         // best-effort
       }
@@ -379,7 +373,8 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
       o.events.close();
     }
     outstanding.clear();
-    for (java.util.Map.Entry<MessageId, CompletableFuture<SessionJobs>> e : listRequests.entrySet()) {
+    for (java.util.Map.Entry<MessageId, CompletableFuture<SessionJobs>> e :
+        listRequests.entrySet()) {
       if (!e.getValue().isDone()) {
         e.getValue().completeExceptionally(cause);
       }

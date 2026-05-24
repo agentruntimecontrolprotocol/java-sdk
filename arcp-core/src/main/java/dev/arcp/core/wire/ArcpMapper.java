@@ -36,9 +36,8 @@ public final class ArcpMapper {
   /**
    * Shared mapper for hot-path use.
    *
-   * Treat this instance as read-only. Reconfiguring the shared mapper can
-   * affect unrelated callers because the same ObjectMapper is reused across
-   * the SDK.
+   * <p>Treat this instance as read-only. Reconfiguring the shared mapper can affect unrelated
+   * callers because the same ObjectMapper is reused across the SDK.
    */
   public static ObjectMapper shared() {
     return SHARED;
