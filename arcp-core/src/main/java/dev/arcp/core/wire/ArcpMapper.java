@@ -33,7 +33,13 @@ public final class ArcpMapper {
 
   private static final ObjectMapper SHARED = create();
 
-  /** Shared, immutable mapper for hot-path use. */
+  /**
+   * Shared mapper for hot-path use.
+   *
+   * Treat this instance as read-only. Reconfiguring the shared mapper can
+   * affect unrelated callers because the same ObjectMapper is reused across
+   * the SDK.
+   */
   public static ObjectMapper shared() {
     return SHARED;
   }

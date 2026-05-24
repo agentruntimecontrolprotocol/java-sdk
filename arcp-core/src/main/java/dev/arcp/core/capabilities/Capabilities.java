@@ -12,7 +12,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Client/runtime capability advertisement carried on session.hello and session.welcome. Unknown
- * feature strings are preserved on the wire as ignored but round-trip-safe.
+ * feature strings are ignored and dropped during decoding.
  */
 public record Capabilities(
     List<String> encodings, Set<Feature> features, @Nullable List<AgentDescriptor> agents) {

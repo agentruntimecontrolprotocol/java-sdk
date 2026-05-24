@@ -53,7 +53,11 @@ public final class BudgetCounters {
     ref.updateAndGet(b -> b.subtract(amount));
   }
 
-  /** Returns null if all budgets are positive; otherwise throws. */
+  /**
+   * Returns normally if all budgets remain positive.
+   *
+   * @throws BudgetExhaustedException if any counter reaches zero or below
+   */
   public void ensureAllPositive() throws BudgetExhaustedException {
     for (var e : counters.entrySet()) {
       if (e.getValue().get().signum() <= 0) {

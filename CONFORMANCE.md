@@ -11,7 +11,7 @@ works" is decomposed into multiple binary rows.
 |---|---|---|
 | §4.1 WebSocket over `wss://` | Implemented | [arcp-runtime-jetty/src/main/java/dev/arcp/runtime/jetty/ArcpJettyServer.java:18](arcp-runtime-jetty/src/main/java/dev/arcp/runtime/jetty/ArcpJettyServer.java#L18) (server) + [arcp-client/src/main/java/dev/arcp/client/WebSocketTransport.java:29](arcp-client/src/main/java/dev/arcp/client/WebSocketTransport.java#L29) (client) |
 | §4.1 JSON text frames | Implemented | [arcp-runtime-jetty/src/main/java/dev/arcp/runtime/jetty/WebSocketJsonTransport.java](arcp-runtime-jetty/src/main/java/dev/arcp/runtime/jetty/WebSocketJsonTransport.java) |
-| §4.2 stdio newline-delimited JSON | Deferred | Not in 1.0.0; covered by `MemoryTransport` for in-process scenarios. |
+| §4.2 stdio newline-delimited JSON | Implemented | [arcp-core/src/main/java/dev/arcp/core/transport/StdioTransport.java](arcp-core/src/main/java/dev/arcp/core/transport/StdioTransport.java) |
 | §4.3 Alternate transports MAY exist | Implemented | [arcp-core/src/main/java/dev/arcp/core/transport/MemoryTransport.java](arcp-core/src/main/java/dev/arcp/core/transport/MemoryTransport.java) implements the `Transport` SPI |
 
 ## §5. Wire Format
@@ -20,7 +20,7 @@ works" is decomposed into multiple binary rows.
 |---|---|---|
 | §5.1 Envelope shape (`arcp`, `id`, `type`, `payload`, ...) | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java:22](arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java#L22) |
 | §5.1 Unknown top-level fields ignored | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/ArcpMapper.java](arcp-core/src/main/java/dev/arcp/core/wire/ArcpMapper.java) sets `FAIL_ON_UNKNOWN_PROPERTIES=false` |
-| §5.1 `arcp` version string `"1"` | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java:31](arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java#L31) |
+| §5.1 `arcp` version string `"1.1"` | Implemented | [arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java:31](arcp-core/src/main/java/dev/arcp/core/wire/Envelope.java#L31) |
 
 ## §6. Sessions
 
