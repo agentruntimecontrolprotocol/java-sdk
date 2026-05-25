@@ -57,14 +57,20 @@ jobs:
       - name: Build and test
         # JDK 25 skips spotless because google-java-format embedded in the pinned
         # spotless version cannot run against JDK 25's javac internals.
+        # `install` (not `verify`) so subsequent `mvn -f <module>/pom.xml` steps
+        # resolve our SNAPSHOTs from the local repository.
         run: |
           if [[ "${{ matrix.jdk }}" == "21" ]]; then
-            mvn -B -ntp -Dmaven.javadoc.skip=true verify
+            mvn -B -ntp -Dmaven.javadoc.skip=true install
           else
-            mvn -B -ntp -Dmaven.javadoc.skip=true -Darcp.skip.spotless=true verify
+            mvn -B -ntp -Dmaven.javadoc.skip=true -Darcp.skip.spotless=true install
           fi
 
       - name: Run all runnable examples and recipes
+        # `-f <module>/pom.xml` scopes exec:java to the leaf module only.
+        # Using `-pl <module> -am exec:java` runs exec:java on every reactor
+        # module pulled in by -am (including the parent pom), which fails
+        # because no mainClass is defined there.
         run: |
           for module in \
             examples/submit-and-stream \
@@ -95,9 +101,9 @@ jobs:
             recipes/stream-resume
           do
             echo "::group::run $module"
-            mvn -B -ntp -pl "$module" -am -Darcp.skip.spotless=true -Dmaven.javadoc.skip=true \
-              -Dmaven.test.skip=true -Dexec.cleanupDaemonThreads=false \
-              exec:java
+            mvn -B -ntp -f "$module/pom.xml" -Darcp.skip.spotless=true \
+              -Dmaven.javadoc.skip=true -Dmaven.test.skip=true \
+              -Dexec.cleanupDaemonThreads=false exec:java
             echo "::endgroup::"
           done
 
