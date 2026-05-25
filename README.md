@@ -3,11 +3,11 @@
 <p align="center"><strong>Java SDK for the Agent Runtime Control Protocol (ARCP) — submit, observe, and control long-running agent jobs from Java.</strong></p>
 
 <p align="center">
-  <a href="https://central.sonatype.com/artifact/dev.arcp/arcp"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/dev.arcp/arcp.svg"></a>
-  <a href="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://codecov.io/gh/agentruntimecontrolprotocol/java-sdk"><img alt="codecov" src="https://codecov.io/gh/agentruntimecontrolprotocol/java-sdk/graph/badge.svg"></a>
-  <a href="https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md"><img alt="ARCP" src="https://img.shields.io/badge/ARCP-v1.1%20draft-blue"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-lightgrey"></a>
+  <a href="https://central.sonatype.com/artifact/dev.arcp/arcp"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/dev.arcp/arcp.svg?cb=20260525"></a>
+  <a href="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml/badge.svg?cb=20260525"></a>
+  <a href="https://codecov.io/gh/agentruntimecontrolprotocol/java-sdk"><img alt="codecov" src="https://codecov.io/gh/agentruntimecontrolprotocol/java-sdk/graph/badge.svg?cb=20260525"></a>
+  <a href="https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md"><img alt="ARCP" src="https://img.shields.io/badge/ARCP-v1.1%20draft-blue?cb=20260525"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-lightgrey?cb=20260525"></a>
 </p>
 
 <p align="center">
@@ -29,17 +29,6 @@ ARCP itself is a transport-agnostic wire protocol for long-running AI agent jobs
 
 Requires JDK 21 LTS. Artifacts are published to Maven Central as `dev.arcp:*`; the `arcp` umbrella re-exports `arcp-client` and `arcp-runtime`. Pull just the side you need à la carte, or pick up framework middleware (`arcp-middleware-spring-boot`, `-jakarta`, `-vertx`), the OpenTelemetry adapter (`arcp-otel`), and the Jetty WebSocket runtime (`arcp-runtime-jetty`) as needed:
 
-```kotlin
-// Gradle (Kotlin DSL)
-dependencies {
-    implementation("dev.arcp:arcp:1.0.0")                  // umbrella (client + runtime)
-    // or, à la carte:
-    implementation("dev.arcp:arcp-client:1.0.0")           // client side
-    implementation("dev.arcp:arcp-runtime:1.0.0")          // runtime side
-    implementation("dev.arcp:arcp-runtime-jetty:1.0.0")    // WebSocket server
-}
-```
-
 ```xml
 <!-- Maven -->
 <dependency>
@@ -47,6 +36,29 @@ dependencies {
   <artifactId>arcp</artifactId>
   <version>1.0.0</version>
 </dependency>
+<!-- or, à la carte: -->
+<dependency>
+  <groupId>dev.arcp</groupId>
+  <artifactId>arcp-client</artifactId>      <!-- client side -->
+  <version>1.0.0</version>
+</dependency>
+<dependency>
+  <groupId>dev.arcp</groupId>
+  <artifactId>arcp-runtime</artifactId>     <!-- runtime side -->
+  <version>1.0.0</version>
+</dependency>
+<dependency>
+  <groupId>dev.arcp</groupId>
+  <artifactId>arcp-runtime-jetty</artifactId> <!-- WebSocket server -->
+  <version>1.0.0</version>
+</dependency>
+```
+
+```kotlin
+// Gradle (Kotlin DSL) — coordinates work in any JVM build tool
+dependencies {
+    implementation("dev.arcp:arcp:1.0.0")                  // umbrella (client + runtime)
+}
 ```
 
 ## Quick start

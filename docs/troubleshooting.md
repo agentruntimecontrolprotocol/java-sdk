@@ -267,9 +267,11 @@ bundle a JDK.
 ### Spotless fails on CI
 
 Spotless runs only on JDK 21 (see `.github/workflows/ci.yml`). Run
-`./gradlew spotlessApply` locally to reformat before pushing.
+`mvn spotless:apply` locally to reformat before pushing. On JDK 25, the
+pinned google-java-format cannot run against current javac internals; pass
+`-Darcp.skip.spotless=true` when iterating locally.
 
 ### `module-info.class` not found
 
-Ensure `--release 21` is set in `build.gradle.kts`. The SDK targets JDK 21
-bytecode even when built on JDK 25.
+Ensure `<maven.compiler.release>21</maven.compiler.release>` is set in the
+root `pom.xml`. The SDK targets JDK 21 bytecode even when built on JDK 25.

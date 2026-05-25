@@ -14,16 +14,23 @@ GitHub repository secrets:
 | `GPG_SIGNING_KEY` | ASCII-armored PGP private key, in-memory format |
 | `GPG_SIGNING_PASSWORD` | PGP key passphrase |
 
-Local Gradle properties (only if you publish from a developer machine
-rather than CI):
+Local Maven settings (only if you publish from a developer machine
+rather than CI) — add a `central` server entry to `~/.m2/settings.xml`:
 
+```xml
+<settings>
+  <servers>
+    <server>
+      <id>central</id>
+      <username>...</username>  <!-- Sonatype Central user token name -->
+      <password>...</password>  <!-- Sonatype Central user token password -->
+    </server>
+  </servers>
+</settings>
 ```
-# ~/.gradle/gradle.properties
-ossrhUsername=...
-ossrhPassword=...
-signingKey=...
-signingPassword=...
-```
+
+Export the GPG passphrase as `MAVEN_GPG_PASSPHRASE` so `maven-gpg-plugin`
+picks it up without an interactive prompt.
 
 The PGP key must be uploaded to a public keyserver (e.g.
 `keys.openpgp.org`) so Sonatype can verify signatures.
@@ -33,19 +40,20 @@ The PGP key must be uploaded to a public keyserver (e.g.
 Run locally before tagging:
 
 ```bash
-./gradlew clean build                     # 137 tasks green, 40 tests pass
-./gradlew :examples:submit-and-stream:run # spot-check one example
-./gradlew :arcp-core:publishToMavenLocal  # POM diff against the previous
-                                          # release should be small
+mvn -B clean verify                            # full reactor + tests must be green
+mvn -B -pl examples/submit-and-stream -am \
+  -DskipTests exec:java                        # spot-check one example
+mvn -B -pl arcp-core -am -DskipTests install   # POM diff against the previous
+                                               # release should be small
 ```
 
 Then sanity-check:
 
 - [ ] [`CHANGELOG.md`](CHANGELOG.md) has a section for the new version.
 - [ ] [`CONFORMANCE.md`](CONFORMANCE.md) test counts match the actual
-      `./gradlew test` output.
+      `mvn test` output.
 - [ ] [`README.md`](README.md) version coordinates match the version you
-      are about to cut (Gradle + Maven snippets).
+      are about to cut (Maven + Gradle snippets).
 - [ ] All 10 examples print `OK ...` on a fresh clone.
 - [ ] `make -C docs/diagrams` produces no diff against the committed SVGs.
 
@@ -59,19 +67,21 @@ Then sanity-check:
 
 The workflow:
 
-1. Replaces `version = "..."` in the root `build.gradle.kts`.
-2. Runs `./gradlew build` — must be green.
-3. Publishes all 10 artifacts to Sonatype Central staging.
+1. Runs `mvn versions:set` to stamp the reactor with the release version.
+2. Runs `mvn -Prelease verify` — must be green.
+3. Runs `mvn -Prelease -DskipTests deploy` — every library module's
+   `central-publishing-maven-plugin` uploads the signed artifacts and
+   `autoPublish=true` releases them straight from the Central Portal.
 4. Tags the commit as `vX.Y.Z` and pushes the tag.
 
-Sonatype staging holds the artifacts until you log into the Central UI
-and run **Close** then **Release** on the staging repository. Once
-released, artifacts sync to Maven Central within ~30 minutes.
+Artifacts typically sync from the Central Portal to the Maven Central
+read endpoint within ~30 minutes.
 
 ## Post-release
 
-- [ ] Bump the root `version` back to the next SNAPSHOT (e.g.
-      `1.0.2-SNAPSHOT`) and commit.
+- [ ] Bump the reactor version back to the next SNAPSHOT (e.g.
+      `mvn versions:set -DnewVersion=1.0.2-SNAPSHOT -DgenerateBackupPoms=false`)
+      and commit.
 - [ ] Open a release notes pull request based on the CHANGELOG diff.
 - [ ] Create a GitHub Release pointing at the new tag with the CHANGELOG
       excerpt as the body.

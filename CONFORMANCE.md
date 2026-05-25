@@ -146,7 +146,7 @@ works" is decomposed into multiple binary rows.
 
 ## Tests
 
-Counts after `./gradlew test`:
+Counts after `mvn test`:
 
 | Module | Tests | Status |
 |---|---|---|

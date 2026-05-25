@@ -14,12 +14,12 @@ creates a span per envelope send/receive.
 
 ## Setup
 
-```kotlin
-// build.gradle.kts
-implementation("dev.arcp:arcp-otel:1.0.0")
-implementation("io.opentelemetry:opentelemetry-api:1.40.0")
-runtimeOnly("io.opentelemetry:opentelemetry-sdk:1.40.0")
-runtimeOnly("io.opentelemetry:opentelemetry-exporter-otlp:1.40.0")
+```xml
+<!-- pom.xml -->
+<dependency><groupId>dev.arcp</groupId><artifactId>arcp-otel</artifactId><version>1.0.0</version></dependency>
+<dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-api</artifactId><version>1.40.0</version></dependency>
+<dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-sdk</artifactId><version>1.40.0</version><scope>runtime</scope></dependency>
+<dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-exporter-otlp</artifactId><version>1.40.0</version><scope>runtime</scope></dependency>
 ```
 
 Wrap the transport before passing it to the client or runtime:
@@ -87,5 +87,5 @@ OpenTelemetrySdk otel = OpenTelemetrySdk.builder()
 with Jaeger via the OTLP exporter. Run with:
 
 ```
-./gradlew :examples:tracing:run
+mvn -pl examples/tracing -am -DskipTests exec:java
 ```

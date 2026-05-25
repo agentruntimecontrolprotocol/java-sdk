@@ -21,15 +21,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+          cache: maven
 
-      - uses: gradle/actions/setup-gradle@v6
+      - name: Install dependencies of ${{ matrix.module }}
+        run: mvn -B -ntp -pl ${{ matrix.module }} -am -DskipTests -Darcp.skip.spotless=true install
 
       - name: Run PIT mutation analysis
-        run: ./gradlew :${{ matrix.module }}:pitest --no-daemon --stacktrace
+        run: mvn -B -ntp -pl ${{ matrix.module }} -Darcp.skip.spotless=true org.pitest:pitest-maven:mutationCoverage
 
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pitest-${{ matrix.module }}
-          path: ${{ matrix.module }}/build/reports/pitest/
+          path: ${{ matrix.module }}/target/pit-reports/

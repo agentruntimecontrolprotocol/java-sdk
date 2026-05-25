@@ -11,9 +11,10 @@ since: "1.0.0"
 
 ## Prerequisites
 
-- **JDK 21+.** Set `JAVA_HOME` to a JDK 21 installation; the Gradle wrapper
-  (`./gradlew`) picks it up automatically.
-- **Gradle 8.x** via the bundled wrapper — no separate installation needed.
+- **JDK 21+.** Set `JAVA_HOME` to a JDK 21 installation; your build tool
+  picks it up automatically.
+- **Apache Maven 3.9+** (or any Maven/Gradle-compatible build that can
+  resolve from Maven Central).
 
 ## Add the dependency
 

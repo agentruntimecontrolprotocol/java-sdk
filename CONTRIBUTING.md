@@ -58,21 +58,21 @@ than large ones; if a change is big, say so early and we'll help break it down.
 
 ## Development setup
 
-The build targets JDK 21 LTS (`--release 21`) and is driven entirely by the
-bundled Gradle wrapper — do not install Gradle separately. CI runs on Temurin
-21 and 25; either works locally. Clone, point `JAVA_HOME` at a JDK 21+, and
-let the wrapper resolve everything else:
+The build targets JDK 21 LTS (`--release 21`) and runs through Apache Maven
+3.9+. CI runs on Temurin 21 and 25; either works locally. Install Maven (or use
+your IDE's bundled copy), clone, and point `JAVA_HOME` at a JDK 21+:
 
 ```sh
 git clone https://github.com/nficano/arpc.git
 cd arpc/java-sdk
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # macOS; use your distro's equivalent
-./gradlew help                                     # bootstraps the wrapper + toolchain
+mvn -version                                       # confirm Maven 3.9+ on JDK 21+
 ```
 
-The build is a multi-module Gradle project (`arcp-core`, `arcp-client`,
+The build is a Maven multi-module reactor (`arcp-core`, `arcp-client`,
 `arcp-runtime`, the `arcp` umbrella, transport adapters, middleware, the TCK,
-and example/recipe projects); `settings.gradle.kts` is the canonical list.
+and example/recipe projects); `pom.xml` at the repo root is the canonical
+`<modules>` list.
 
 ## Tests and conformance
 
@@ -81,13 +81,13 @@ Two layers must pass before a PR merges:
 - **Unit tests** — this SDK's own suite:
 
   ```sh
-  ./gradlew build
+  mvn verify
   ```
 
-  `build` compiles every module, runs Spotless, and executes the JUnit 5 +
-  jqwik suites across all subprojects. Use `./gradlew test` (or
-  `./gradlew :arcp-core:test`) to skip compilation of unrelated modules during
-  iteration.
+  `verify` compiles every module, runs Spotless, and executes the JUnit 5 +
+  jqwik suites across all subprojects. Use `mvn -pl arcp-core test` (with
+  `-am` to also rebuild upstream modules) to skip compilation of unrelated
+  modules during iteration.
 
 - **Conformance** — the SDK's behavior against the reference runtime. New
   protocol-facing code (session negotiation, event sequencing, lease handling,
@@ -97,7 +97,7 @@ Two layers must pass before a PR merges:
   point it at any `Transport` pair — `MemoryTransport.pair()` for the in-process
   reference runtime, or a live WebSocket pair via `arcp-runtime-jetty` +
   `arcp-client`'s `WebSocketTransport.connect(uri)`. Run with
-  `./gradlew :arcp-tck:test`.
+  `mvn -pl arcp-tck -am test`.
 
 CI runs both on every PR. A PR that changes which feature flags the SDK
 negotiates must also update the README feature matrix in the same change.
@@ -107,14 +107,18 @@ negotiates must also update the README feature matrix in the same change.
 Formatting is enforced by [Spotless](https://github.com/diffplug/spotless)
 configured with Google Java Format and unused-import removal. The same JDK 21
 `javac` settings (`-Xlint:all`, `-parameters`, UTF-8) and Javadoc generation
-that CI uses are applied to every `java-library` subproject:
+that CI uses are applied to every library module via the parent POM:
 
 ```sh
-./gradlew spotlessApply           # auto-format
-./gradlew spotlessCheck           # verify (CI gate on JDK 21)
-./gradlew build                   # compile + lint warnings + tests
-./gradlew javadoc                 # Javadoc for the published modules
+mvn spotless:apply                # auto-format
+mvn spotless:check                # verify (CI gate on JDK 21)
+mvn verify                        # compile + lint warnings + tests
+mvn javadoc:javadoc               # Javadoc for the published modules
 ```
+
+The pinned Spotless 2.44.x uses a google-java-format build that can't run
+on JDK 25's javac internals; pass `-Darcp.skip.spotless=true` when iterating
+on JDK 25 locally. CI pins the Spotless gate to JDK 21.
 
 Beyond formatting, the house style is captured in the existing code: records
 for value types, sealed hierarchies (`Message`, `EventBody`, `ArcpException`)
@@ -143,8 +147,8 @@ the changelog. Prefer clarity over cleverness in a library others build on.
 
 Releases are cut by maintainers. The `release` GitHub Actions workflow is
 dispatched manually with a version input; it builds, signs with the project
-PGP key, publishes the aggregated set of `dev.arcp:*` artifacts to Maven
-Central via the `com.gradleup.nmcp` plugin, and pushes a `vX.Y.Z` tag.
+PGP key, publishes the `dev.arcp:*` artifacts to Maven Central via the
+`central-publishing-maven-plugin`, and pushes a `vX.Y.Z` tag.
 Detailed operator steps live in [RELEASING.md](RELEASING.md). The SDK is
 versioned with semantic versioning independently of the protocol version it
 speaks; a protocol version bump is noted in the changelog when the negotiated

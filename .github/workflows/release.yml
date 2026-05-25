@@ -30,8 +30,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-
-      - uses: gradle/actions/setup-gradle@v6
+          cache: maven
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
+          gpg-passphrase: GPG_SIGNING_PASSWORD
 
       - name: Configure git for tagging
         run: |
@@ -40,25 +44,26 @@ jobs:
 
       - name: Set release version
         run: |
-          # Replace `version = "x.x.x-SNAPSHOT"` with the supplied release version.
-          sed -i 's|version = ".*"|version = "${{ inputs.version }}"|' build.gradle.kts
-          grep '^[ ]*version =' build.gradle.kts
+          mvn -B -ntp versions:set -DnewVersion=${{ inputs.version }} -DgenerateBackupPoms=false
+          mvn -B -ntp versions:commit || true
 
       - name: Build + test
-        run: ./gradlew build --no-daemon --stacktrace
+        run: mvn -B -ntp verify
 
       - name: Publish to Maven Central
         if: ${{ !inputs.dry_run }}
         env:
           CENTRAL_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_SIGNING_KEY }}
-          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_SIGNING_PASSWORD }}
-        run: ./gradlew --no-daemon --stacktrace publishAggregationToCentralPortal
+          GPG_SIGNING_PASSWORD: ${{ secrets.GPG_SIGNING_PASSWORD }}
+          # MAVEN_GPG_PASSPHRASE is the env name maven-gpg-plugin reads by
+          # default when no <passphrase> is set in the plugin config.
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_SIGNING_PASSWORD }}
+        run: mvn -B -ntp -Prelease -DskipTests deploy
 
       - name: Local publish (dry run)
         if: ${{ inputs.dry_run }}
-        run: ./gradlew publishToMavenLocal --no-daemon --stacktrace
+        run: mvn -B -ntp install
 
       - name: Tag the release
         if: ${{ !inputs.dry_run }}
