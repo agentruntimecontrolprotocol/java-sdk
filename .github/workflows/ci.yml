@@ -108,6 +108,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # Jacoco XML reports are emitted to **/build/reports/jacoco/test/
+      # because subprojects apply the jacoco plugin and Test is finalizedBy
+      # jacocoTestReport (see root build.gradle.kts). Upload from the LTS
+      # floor only — coverage is identical across JDKs. Non-blocking.
+      - name: Upload coverage to Codecov
+        if: matrix.jdk == '21'
+        # codecov/codecov-action v6.0.1
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        with:
+          fail_ci_if_error: false
+          flags: unittests
+          files: "**/build/reports/jacoco/test/jacocoTestReport.xml"
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   javadoc:
     name: javadoc
     runs-on: ubuntu-24.04
