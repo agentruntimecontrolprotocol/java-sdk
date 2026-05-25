@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.arcp.core.events.ResultChunkEvent;
 import dev.arcp.core.ids.ResultId;
+import java.io.ByteArrayOutputStream;
+import java.io.FilterOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.junit.jupiter.api.Test;
@@ -53,5 +55,62 @@ class ResultStreamTest {
     // chunk_seq 0 has already been consumed (nextExpected is 1)
     assertThatThrownBy(() -> stream.accept(new ResultChunkEvent(id, 0, "a", "utf8", true)))
         .isInstanceOf(ResultStream.DuplicateChunkException.class);
+  }
+
+  @Test
+  void rejectsWrongResultIdAndEncodingSwitches() throws Exception {
+    ResultStream stream = ResultStream.toMemory(ResultId.of("res_expected"));
+    assertThatThrownBy(
+            () ->
+                stream.accept(
+                    new ResultChunkEvent(
+                        ResultId.of("res_other"), 0, "a", ResultChunkEvent.UTF8, false)))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("wrong result_id");
+
+    ResultStream encoding = ResultStream.toMemory(ResultId.of("res_encoding"));
+    encoding.accept(
+        new ResultChunkEvent(ResultId.of("res_encoding"), 0, "a", ResultChunkEvent.UTF8, true));
+    assertThatThrownBy(
+            () ->
+                encoding.accept(
+                    new ResultChunkEvent(
+                        ResultId.of("res_encoding"),
+                        1,
+                        Base64.getEncoder().encodeToString("b".getBytes(StandardCharsets.UTF_8)),
+                        ResultChunkEvent.BASE64,
+                        false)))
+        .isInstanceOf(ResultStream.EncodingMismatchException.class);
+  }
+
+  @Test
+  void sinkModeTracksBytesAndRejectsInMemoryAccess() throws Exception {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    FilterOutputStream sink = new FilterOutputStream(bytes);
+    ResultStream stream = ResultStream.toSink(ResultId.of("res_sink"), sink);
+    stream.accept(new ResultChunkEvent(ResultId.of("res_sink"), 0, "abc", "utf8", false));
+    assertThat(stream.bytesWritten()).isEqualTo(3);
+    assertThat(bytes.toString(StandardCharsets.UTF_8)).isEqualTo("abc");
+    assertThatThrownBy(stream::bytes)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("not in-memory");
+    assertThatThrownBy(
+            () ->
+                stream.accept(
+                    new ResultChunkEvent(ResultId.of("res_sink"), 1, "late", "utf8", false)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("already closed");
+  }
+
+  @Test
+  void terminalChunkWithPendingBeyondItIsRejected() throws Exception {
+    ResultStream stream = ResultStream.toMemory(ResultId.of("res_terminal"));
+    stream.accept(new ResultChunkEvent(ResultId.of("res_terminal"), 1, "late", "utf8", true));
+    assertThatThrownBy(
+            () ->
+                stream.accept(
+                    new ResultChunkEvent(ResultId.of("res_terminal"), 0, "done", "utf8", false)))
+        .isInstanceOf(ResultStream.OutOfOrderChunkException.class)
+        .hasMessageContaining("chunks beyond terminal");
   }
 }
