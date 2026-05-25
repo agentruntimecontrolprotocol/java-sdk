@@ -23,89 +23,71 @@ import java.util.concurrent.TimeUnit;
  * leases enforce spending limits across different agent calls.
  */
 public final class Main {
-    public static void main(String[] args) throws Exception {
-        MemoryTransport.Pair pair = MemoryTransport.pair();
-        ArcpRuntime runtime =
-                ArcpRuntime.builder()
-                        .agent(
-                                "cheap-agent",
-                                "1.0.0",
-                                (input, ctx) -> {
-                                    ctx.emit(
-                                            new MetricEvent(
-                                                    "cost.inference",
-                                                    new BigDecimal("1.00"),
-                                                    "USD",
-                                                    null));
-                                    ctx.authorize("tool.call", "*");
-                                    return JobOutcome.Success.inline(
-                                            JsonNodeFactory.instance
-                                                    .objectNode()
-                                                    .put("agent", "cheap"));
-                                })
-                        .agent(
-                                "expensive-agent",
-                                "1.0.0",
-                                (input, ctx) -> {
-                                    ctx.emit(
-                                            new MetricEvent(
-                                                    "cost.inference",
-                                                    new BigDecimal("8.00"),
-                                                    "USD",
-                                                    null));
-                                    ctx.authorize("tool.call", "*");
-                                    return JobOutcome.Success.inline(
-                                            JsonNodeFactory.instance
-                                                    .objectNode()
-                                                    .put("agent", "expensive"));
-                                })
-                        .build();
-        runtime.accept(pair.runtime());
+  public static void main(String[] args) throws Exception {
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent(
+                "cheap-agent",
+                "1.0.0",
+                (input, ctx) -> {
+                  ctx.emit(new MetricEvent("cost.inference", new BigDecimal("1.00"), "USD", null));
+                  ctx.authorize("tool.call", "*");
+                  return JobOutcome.Success.inline(
+                      JsonNodeFactory.instance.objectNode().put("agent", "cheap"));
+                })
+            .agent(
+                "expensive-agent",
+                "1.0.0",
+                (input, ctx) -> {
+                  ctx.emit(new MetricEvent("cost.inference", new BigDecimal("8.00"), "USD", null));
+                  ctx.authorize("tool.call", "*");
+                  return JobOutcome.Success.inline(
+                      JsonNodeFactory.instance.objectNode().put("agent", "expensive"));
+                })
+            .build();
+    runtime.accept(pair.runtime());
 
-        // Lease: allow all tool calls but cap total spend at USD 5.00.
-        Lease lease =
-                Lease.builder()
-                        .allow("tool.call", "*")
-                        .allow("cost.budget", "USD:5.00")
-                        .build();
+    // Lease: allow all tool calls but cap total spend at USD 5.00.
+    Lease lease = Lease.builder().allow("tool.call", "*").allow("cost.budget", "USD:5.00").build();
 
-        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
-            client.connect(Duration.ofSeconds(5));
+    try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
+      client.connect(Duration.ofSeconds(5));
 
-            // Cheap agent (USD 1.00) should succeed within budget.
-            JobHandle cheapHandle =
-                    client.submit(
-                            ArcpClient.jobSubmit(
-                                    "cheap-agent@1.0.0",
-                                    JsonNodeFactory.instance.objectNode(),
-                                    lease,
-                                    null,
-                                    null,
-                                    null));
-            JobResult cheapResult = cheapHandle.result().get(5, TimeUnit.SECONDS);
-            assert "cheap".equals(cheapResult.result().get("agent").asText())
-                    : "unexpected result: " + cheapResult.result();
+      // Cheap agent (USD 1.00) should succeed within budget.
+      JobHandle cheapHandle =
+          client.submit(
+              ArcpClient.jobSubmit(
+                  "cheap-agent@1.0.0",
+                  JsonNodeFactory.instance.objectNode(),
+                  lease,
+                  null,
+                  null,
+                  null));
+      JobResult cheapResult = cheapHandle.result().get(5, TimeUnit.SECONDS);
+      assert "cheap".equals(cheapResult.result().get("agent").asText())
+          : "unexpected result: " + cheapResult.result();
 
-            // Expensive agent (USD 8.00) should fail with BudgetExhaustedException.
-            JobHandle expensiveHandle =
-                    client.submit(
-                            ArcpClient.jobSubmit(
-                                    "expensive-agent@1.0.0",
-                                    JsonNodeFactory.instance.objectNode(),
-                                    lease,
-                                    null,
-                                    null,
-                                    null));
-            try {
-                expensiveHandle.result().get(5, TimeUnit.SECONDS);
-                throw new AssertionError("expected BudgetExhaustedException");
-            } catch (ExecutionException e) {
-                assert e.getCause() instanceof BudgetExhaustedException
-                        : "expected BudgetExhaustedException, got " + e.getCause();
-            }
+      // Expensive agent (USD 8.00) should fail with BudgetExhaustedException.
+      JobHandle expensiveHandle =
+          client.submit(
+              ArcpClient.jobSubmit(
+                  "expensive-agent@1.0.0",
+                  JsonNodeFactory.instance.objectNode(),
+                  lease,
+                  null,
+                  null,
+                  null));
+      try {
+        expensiveHandle.result().get(5, TimeUnit.SECONDS);
+        throw new AssertionError("expected BudgetExhaustedException");
+      } catch (ExecutionException e) {
+        assert e.getCause() instanceof BudgetExhaustedException
+            : "expected BudgetExhaustedException, got " + e.getCause();
+      }
 
-            System.out.println("OK multi-agent-budget");
-        }
-        runtime.close();
+      System.out.println("OK multi-agent-budget");
     }
+    runtime.close();
+  }
 }

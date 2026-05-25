@@ -17,44 +17,39 @@ import java.util.concurrent.TimeUnit;
  * lease; the runtime surfaces PERMISSION_DENIED and the client sees PermissionDeniedException.
  */
 public final class Main {
-    public static void main(String[] args) throws Exception {
-        MemoryTransport.Pair pair = MemoryTransport.pair();
-        ArcpRuntime runtime =
-                ArcpRuntime.builder()
-                        .agent(
-                                "writer",
-                                "1.0.0",
-                                (input, ctx) -> {
-                                    // Requests fs.write but the lease only grants fs.read.
-                                    ctx.authorize("fs.write", "/tmp/data");
-                                    return JobOutcome.Success.inline(input.payload());
-                                })
-                        .build();
-        runtime.accept(pair.runtime());
+  public static void main(String[] args) throws Exception {
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent(
+                "writer",
+                "1.0.0",
+                (input, ctx) -> {
+                  // Requests fs.write but the lease only grants fs.read.
+                  ctx.authorize("fs.write", "/tmp/data");
+                  return JobOutcome.Success.inline(input.payload());
+                })
+            .build();
+    runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
-            client.connect(Duration.ofSeconds(5));
+    try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
+      client.connect(Duration.ofSeconds(5));
 
-            Lease lease = Lease.builder().allow("fs.read", "*").build();
-            JobHandle handle =
-                    client.submit(
-                            ArcpClient.jobSubmit(
-                                    "writer@1.0.0",
-                                    JsonNodeFactory.instance.objectNode(),
-                                    lease,
-                                    null,
-                                    null,
-                                    null));
+      Lease lease = Lease.builder().allow("fs.read", "*").build();
+      JobHandle handle =
+          client.submit(
+              ArcpClient.jobSubmit(
+                  "writer@1.0.0", JsonNodeFactory.instance.objectNode(), lease, null, null, null));
 
-            try {
-                handle.result().get(5, TimeUnit.SECONDS);
-                throw new AssertionError("expected PermissionDeniedException");
-            } catch (ExecutionException e) {
-                assert e.getCause() instanceof PermissionDeniedException
-                        : "expected PermissionDeniedException, got " + e.getCause();
-                System.out.println("OK lease-violation");
-            }
-        }
-        runtime.close();
+      try {
+        handle.result().get(5, TimeUnit.SECONDS);
+        throw new AssertionError("expected PermissionDeniedException");
+      } catch (ExecutionException e) {
+        assert e.getCause() instanceof PermissionDeniedException
+            : "expected PermissionDeniedException, got " + e.getCause();
+        System.out.println("OK lease-violation");
+      }
     }
+    runtime.close();
+  }
 }

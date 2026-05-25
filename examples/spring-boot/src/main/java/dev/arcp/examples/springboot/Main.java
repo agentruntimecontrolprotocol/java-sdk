@@ -23,40 +23,33 @@ import org.springframework.context.annotation.Bean;
 @SpringBootApplication
 public class Main {
 
-    @Bean
-    ArcpRuntime arcpRuntime() {
-        return ArcpRuntime.builder()
-                .agent(
-                        "spring-echo",
-                        "1.0.0",
-                        (input, ctx) -> JobOutcome.Success.inline(input.payload()))
-                .build();
-    }
+  @Bean
+  ArcpRuntime arcpRuntime() {
+    return ArcpRuntime.builder()
+        .agent("spring-echo", "1.0.0", (input, ctx) -> JobOutcome.Success.inline(input.payload()))
+        .build();
+  }
 
-    public static void main(String[] args) throws Exception {
-        ConfigurableApplicationContext ctx =
-                SpringApplication.run(Main.class, "--server.port=0");
-        try {
-            int port =
-                    ((ServletWebServerApplicationContext) ctx).getWebServer().getPort();
-            URI uri = URI.create("ws://127.0.0.1:" + port + "/arcp");
-            WebSocketTransport transport = WebSocketTransport.connect(uri);
-            try (ArcpClient client = ArcpClient.builder(transport).build()) {
-                client.connect(Duration.ofSeconds(5));
-                JobHandle handle =
-                        client.submit(
-                                ArcpClient.jobSubmit(
-                                        "spring-echo@1.0.0",
-                                        JsonNodeFactory.instance
-                                                .objectNode()
-                                                .put("greeting", "spring")));
-                JobResult result = handle.result().get(5, TimeUnit.SECONDS);
-                assert "spring".equals(result.result().get("greeting").asText())
-                        : "unexpected result: " + result.result();
-                System.out.println("OK spring-boot");
-            }
-        } finally {
-            ctx.close();
-        }
+  public static void main(String[] args) throws Exception {
+    ConfigurableApplicationContext ctx = SpringApplication.run(Main.class, "--server.port=0");
+    try {
+      int port = ((ServletWebServerApplicationContext) ctx).getWebServer().getPort();
+      URI uri = URI.create("ws://127.0.0.1:" + port + "/arcp");
+      WebSocketTransport transport = WebSocketTransport.connect(uri);
+      try (ArcpClient client = ArcpClient.builder(transport).build()) {
+        client.connect(Duration.ofSeconds(5));
+        JobHandle handle =
+            client.submit(
+                ArcpClient.jobSubmit(
+                    "spring-echo@1.0.0",
+                    JsonNodeFactory.instance.objectNode().put("greeting", "spring")));
+        JobResult result = handle.result().get(5, TimeUnit.SECONDS);
+        assert "spring".equals(result.result().get("greeting").asText())
+            : "unexpected result: " + result.result();
+        System.out.println("OK spring-boot");
+      }
+    } finally {
+      ctx.close();
     }
+  }
 }

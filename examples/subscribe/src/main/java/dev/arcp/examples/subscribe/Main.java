@@ -21,76 +21,74 @@ import java.util.concurrent.atomic.AtomicInteger;
  * StatusEvents; client B subscribes to the completed job's event stream and replays all events.
  */
 public final class Main {
-    public static void main(String[] args) throws Exception {
-        MemoryTransport.Pair pair1 = MemoryTransport.pair();
-        MemoryTransport.Pair pair2 = MemoryTransport.pair();
+  public static void main(String[] args) throws Exception {
+    MemoryTransport.Pair pair1 = MemoryTransport.pair();
+    MemoryTransport.Pair pair2 = MemoryTransport.pair();
 
-        ArcpRuntime runtime =
-                ArcpRuntime.builder()
-                        .agent(
-                                "ticker",
-                                "1.0.0",
-                                (input, ctx) -> {
-                                    for (int i = 1; i <= 5; i++) {
-                                        ctx.emit(new StatusEvent("tick-" + i, null));
-                                    }
-                                    return JobOutcome.Success.inline(input.payload());
-                                })
-                        .build();
-        runtime.accept(pair1.runtime());
-        runtime.accept(pair2.runtime());
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent(
+                "ticker",
+                "1.0.0",
+                (input, ctx) -> {
+                  for (int i = 1; i <= 5; i++) {
+                    ctx.emit(new StatusEvent("tick-" + i, null));
+                  }
+                  return JobOutcome.Success.inline(input.payload());
+                })
+            .build();
+    runtime.accept(pair1.runtime());
+    runtime.accept(pair2.runtime());
 
-        JobId jobId;
+    JobId jobId;
 
-        // Client A: submit the job and wait for it to complete.
-        try (ArcpClient clientA = ArcpClient.builder(pair1.client()).bearer("demo").build()) {
-            clientA.connect(Duration.ofSeconds(5));
-            JobHandle handle =
-                    clientA.submit(
-                            ArcpClient.jobSubmit(
-                                    "ticker@1.0.0", JsonNodeFactory.instance.objectNode()));
-            handle.result().get(5, TimeUnit.SECONDS);
-            jobId = handle.jobId();
-        }
-
-        // Client B: subscribe to the completed job with full history replay.
-        AtomicInteger replayCount = new AtomicInteger();
-        CompletableFuture<Void> allReplayed = new CompletableFuture<>();
-
-        try (ArcpClient clientB = ArcpClient.builder(pair2.client()).bearer("demo").build()) {
-            clientB.connect(Duration.ofSeconds(5));
-
-            Flow.Publisher<EventBody> events =
-                    clientB.subscribe(jobId, SubscribeOptions.withHistory(0L));
-            events.subscribe(
-                    new Flow.Subscriber<>() {
-                        @Override
-                        public void onSubscribe(Flow.Subscription s) {
-                            s.request(Long.MAX_VALUE);
-                        }
-
-                        @Override
-                        public void onNext(EventBody body) {
-                            if (body instanceof StatusEvent) {
-                                if (replayCount.incrementAndGet() == 5) {
-                                    allReplayed.complete(null);
-                                }
-                            }
-                        }
-
-                        @Override
-                        public void onError(Throwable t) {
-                            allReplayed.completeExceptionally(t);
-                        }
-
-                        @Override
-                        public void onComplete() {}
-                    });
-
-            allReplayed.get(5, TimeUnit.SECONDS);
-            assert replayCount.get() == 5 : "expected 5 replayed events, got " + replayCount.get();
-            System.out.println("OK subscribe");
-        }
-        runtime.close();
+    // Client A: submit the job and wait for it to complete.
+    try (ArcpClient clientA = ArcpClient.builder(pair1.client()).bearer("demo").build()) {
+      clientA.connect(Duration.ofSeconds(5));
+      JobHandle handle =
+          clientA.submit(
+              ArcpClient.jobSubmit("ticker@1.0.0", JsonNodeFactory.instance.objectNode()));
+      handle.result().get(5, TimeUnit.SECONDS);
+      jobId = handle.jobId();
     }
+
+    // Client B: subscribe to the completed job with full history replay.
+    AtomicInteger replayCount = new AtomicInteger();
+    CompletableFuture<Void> allReplayed = new CompletableFuture<>();
+
+    try (ArcpClient clientB = ArcpClient.builder(pair2.client()).bearer("demo").build()) {
+      clientB.connect(Duration.ofSeconds(5));
+
+      Flow.Publisher<EventBody> events = clientB.subscribe(jobId, SubscribeOptions.withHistory(0L));
+      events.subscribe(
+          new Flow.Subscriber<>() {
+            @Override
+            public void onSubscribe(Flow.Subscription s) {
+              s.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(EventBody body) {
+              if (body instanceof StatusEvent) {
+                if (replayCount.incrementAndGet() == 5) {
+                  allReplayed.complete(null);
+                }
+              }
+            }
+
+            @Override
+            public void onError(Throwable t) {
+              allReplayed.completeExceptionally(t);
+            }
+
+            @Override
+            public void onComplete() {}
+          });
+
+      allReplayed.get(5, TimeUnit.SECONDS);
+      assert replayCount.get() == 5 : "expected 5 replayed events, got " + replayCount.get();
+      System.out.println("OK subscribe");
+    }
+    runtime.close();
+  }
 }

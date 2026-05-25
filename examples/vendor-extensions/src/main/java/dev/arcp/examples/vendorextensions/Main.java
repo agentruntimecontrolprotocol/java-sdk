@@ -18,61 +18,60 @@ import java.util.concurrent.TimeUnit;
  * vendor namespace; the client receives and inspects the payload.
  */
 public final class Main {
-    public static void main(String[] args) throws Exception {
-        MemoryTransport.Pair pair = MemoryTransport.pair();
+  public static void main(String[] args) throws Exception {
+    MemoryTransport.Pair pair = MemoryTransport.pair();
 
-        ArcpRuntime runtime =
-                ArcpRuntime.builder()
-                        .agent(
-                                "thinker",
-                                "1.0.0",
-                                (input, ctx) -> {
-                                    ctx.emit(new ThoughtEvent("x-vendor.demo: custom payload here"));
-                                    return JobOutcome.Success.inline(input.payload());
-                                })
-                        .build();
-        runtime.accept(pair.runtime());
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent(
+                "thinker",
+                "1.0.0",
+                (input, ctx) -> {
+                  ctx.emit(new ThoughtEvent("x-vendor.demo: custom payload here"));
+                  return JobOutcome.Success.inline(input.payload());
+                })
+            .build();
+    runtime.accept(pair.runtime());
 
-        CompletableFuture<ThoughtEvent> thoughtReceived = new CompletableFuture<>();
+    CompletableFuture<ThoughtEvent> thoughtReceived = new CompletableFuture<>();
 
-        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
-            client.connect(Duration.ofSeconds(5));
+    try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
+      client.connect(Duration.ofSeconds(5));
 
-            JobHandle handle =
-                    client.submit(
-                            ArcpClient.jobSubmit(
-                                    "thinker@1.0.0", JsonNodeFactory.instance.objectNode()));
+      JobHandle handle =
+          client.submit(
+              ArcpClient.jobSubmit("thinker@1.0.0", JsonNodeFactory.instance.objectNode()));
 
-            handle.events()
-                    .subscribe(
-                            new Flow.Subscriber<>() {
-                                @Override
-                                public void onSubscribe(Flow.Subscription s) {
-                                    s.request(Long.MAX_VALUE);
-                                }
+      handle
+          .events()
+          .subscribe(
+              new Flow.Subscriber<>() {
+                @Override
+                public void onSubscribe(Flow.Subscription s) {
+                  s.request(Long.MAX_VALUE);
+                }
 
-                                @Override
-                                public void onNext(EventBody body) {
-                                    if (body instanceof ThoughtEvent te) {
-                                        thoughtReceived.complete(te);
-                                    }
-                                }
+                @Override
+                public void onNext(EventBody body) {
+                  if (body instanceof ThoughtEvent te) {
+                    thoughtReceived.complete(te);
+                  }
+                }
 
-                                @Override
-                                public void onError(Throwable t) {
-                                    thoughtReceived.completeExceptionally(t);
-                                }
+                @Override
+                public void onError(Throwable t) {
+                  thoughtReceived.completeExceptionally(t);
+                }
 
-                                @Override
-                                public void onComplete() {}
-                            });
+                @Override
+                public void onComplete() {}
+              });
 
-            handle.result().get(5, TimeUnit.SECONDS);
-            ThoughtEvent te = thoughtReceived.get(5, TimeUnit.SECONDS);
-            assert te.text().startsWith("x-vendor.demo:")
-                    : "unexpected vendor event text: " + te.text();
-            System.out.println("OK vendor-extensions");
-        }
-        runtime.close();
+      handle.result().get(5, TimeUnit.SECONDS);
+      ThoughtEvent te = thoughtReceived.get(5, TimeUnit.SECONDS);
+      assert te.text().startsWith("x-vendor.demo:") : "unexpected vendor event text: " + te.text();
+      System.out.println("OK vendor-extensions");
     }
+    runtime.close();
+  }
 }

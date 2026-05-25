@@ -12,27 +12,28 @@ import java.util.EnumSet;
 
 /** Negotiates heartbeat at 1s interval; idle for &gt;2s then verifies session is still active. */
 public final class Main {
-    public static void main(String[] args) throws Exception {
-        MemoryTransport.Pair pair = MemoryTransport.pair();
-        ArcpRuntime runtime = ArcpRuntime.builder()
-                .heartbeatIntervalSec(1)
-                .agent("noop", "1.0.0",
-                        (input, ctx) -> JobOutcome.Success.inline(
-                                JsonNodeFactory.instance.objectNode()))
-                .build();
-        runtime.accept(pair.runtime());
+  public static void main(String[] args) throws Exception {
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .heartbeatIntervalSec(1)
+            .agent(
+                "noop",
+                "1.0.0",
+                (input, ctx) -> JobOutcome.Success.inline(JsonNodeFactory.instance.objectNode()))
+            .build();
+    runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair.client())
-                .features(EnumSet.of(Feature.HEARTBEAT))
-                .build()) {
-            Session session = client.connect(Duration.ofSeconds(5));
-            assert session.heartbeatInterval() != null;
-            assert session.negotiatedFeatures().contains(Feature.HEARTBEAT);
+    try (ArcpClient client =
+        ArcpClient.builder(pair.client()).features(EnumSet.of(Feature.HEARTBEAT)).build()) {
+      Session session = client.connect(Duration.ofSeconds(5));
+      assert session.heartbeatInterval() != null;
+      assert session.negotiatedFeatures().contains(Feature.HEARTBEAT);
 
-            // Stay idle past two heartbeat intervals; the runtime's scheduler should ping.
-            Thread.sleep(2500);
-            System.out.println("OK heartbeat");
-        }
-        runtime.close();
+      // Stay idle past two heartbeat intervals; the runtime's scheduler should ping.
+      Thread.sleep(2500);
+      System.out.println("OK heartbeat");
     }
+    runtime.close();
+  }
 }

@@ -18,59 +18,64 @@ import javax.crypto.spec.SecretKeySpec;
 
 /** Demonstrates an HMAC-SHA-256 BearerVerifier SPI implementation. */
 public final class Main {
-    private static final byte[] SECRET = "shared-secret".getBytes(StandardCharsets.UTF_8);
-    private static final String PRINCIPAL_ID = "alice@example.com";
+  private static final byte[] SECRET = "shared-secret".getBytes(StandardCharsets.UTF_8);
+  private static final String PRINCIPAL_ID = "alice@example.com";
 
-    public static void main(String[] args) throws Exception {
-        String validToken = mintToken(PRINCIPAL_ID, SECRET);
+  public static void main(String[] args) throws Exception {
+    String validToken = mintToken(PRINCIPAL_ID, SECRET);
 
-        BearerVerifier verifier = token -> {
-            // Token shape: "<body>|<hex-sig>". Pipe delimiter avoids collision
-            // with dots in email-style identifiers.
-            int sep = token.lastIndexOf('|');
-            if (sep < 0) {
-                throw new UnauthenticatedException("malformed token");
-            }
-            String body = token.substring(0, sep);
-            String sig = token.substring(sep + 1);
-            String expected = sign(body, SECRET);
-            if (!MessageDigest.isEqual(
-                    sig.getBytes(StandardCharsets.UTF_8),
-                    expected.getBytes(StandardCharsets.UTF_8))) {
-                throw new UnauthenticatedException("bad signature");
-            }
-            return new Principal(body);
+    BearerVerifier verifier =
+        token -> {
+          // Token shape: "<body>|<hex-sig>". Pipe delimiter avoids collision
+          // with dots in email-style identifiers.
+          int sep = token.lastIndexOf('|');
+          if (sep < 0) {
+            throw new UnauthenticatedException("malformed token");
+          }
+          String body = token.substring(0, sep);
+          String sig = token.substring(sep + 1);
+          String expected = sign(body, SECRET);
+          if (!MessageDigest.isEqual(
+              sig.getBytes(StandardCharsets.UTF_8), expected.getBytes(StandardCharsets.UTF_8))) {
+            throw new UnauthenticatedException("bad signature");
+          }
+          return new Principal(body);
         };
 
-        MemoryTransport.Pair pair = MemoryTransport.pair();
-        ArcpRuntime runtime = ArcpRuntime.builder()
-                .verifier(verifier)
-                .agent("whoami", "1.0.0",
-                        (input, ctx) -> JobOutcome.Success.inline(
-                                JsonNodeFactory.instance.objectNode()
-                                        .put("session", input.sessionId().value())))
-                .build();
-        runtime.accept(pair.runtime());
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .verifier(verifier)
+            .agent(
+                "whoami",
+                "1.0.0",
+                (input, ctx) ->
+                    JobOutcome.Success.inline(
+                        JsonNodeFactory.instance
+                            .objectNode()
+                            .put("session", input.sessionId().value())))
+            .build();
+    runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair.client()).bearer(validToken).build()) {
-            Session session = client.connect(Duration.ofSeconds(5));
-            assert session.sessionId() != null;
-            System.out.println("OK custom-auth");
-        }
-        runtime.close();
+    try (ArcpClient client = ArcpClient.builder(pair.client()).bearer(validToken).build()) {
+      Session session = client.connect(Duration.ofSeconds(5));
+      assert session.sessionId() != null;
+      System.out.println("OK custom-auth");
     }
+    runtime.close();
+  }
 
-    private static String mintToken(String body, byte[] secret) {
-        return body + "|" + sign(body, secret);
-    }
+  private static String mintToken(String body, byte[] secret) {
+    return body + "|" + sign(body, secret);
+  }
 
-    private static String sign(String body, byte[] secret) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret, "HmacSHA256"));
-            return HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+  private static String sign(String body, byte[] secret) {
+    try {
+      Mac mac = Mac.getInstance("HmacSHA256");
+      mac.init(new SecretKeySpec(secret, "HmacSHA256"));
+      return HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
+  }
 }

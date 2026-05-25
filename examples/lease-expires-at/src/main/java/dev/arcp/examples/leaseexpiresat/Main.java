@@ -17,39 +17,43 @@ import java.util.concurrent.TimeUnit;
 
 /** Lease expires while the agent is still running; runtime emits LEASE_EXPIRED. */
 public final class Main {
-    public static void main(String[] args) throws Exception {
-        CountDownLatch release = new CountDownLatch(1);
-        MemoryTransport.Pair pair = MemoryTransport.pair();
-        ArcpRuntime runtime = ArcpRuntime.builder()
-                .agent("idle", "1.0.0", (input, ctx) -> {
-                    release.await(5, TimeUnit.SECONDS);
-                    return JobOutcome.Success.inline(input.payload());
+  public static void main(String[] args) throws Exception {
+    CountDownLatch release = new CountDownLatch(1);
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent(
+                "idle",
+                "1.0.0",
+                (input, ctx) -> {
+                  release.await(5, TimeUnit.SECONDS);
+                  return JobOutcome.Success.inline(input.payload());
                 })
-                .build();
-        runtime.accept(pair.runtime());
+            .build();
+    runtime.accept(pair.runtime());
 
-        try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
-            client.connect(Duration.ofSeconds(5));
-            Lease lease = Lease.builder().allow("tool.call", "*").build();
-            LeaseConstraints constraints = LeaseConstraints.of(
-                    Instant.now().plusSeconds(1));
-            JobHandle handle = client.submit(ArcpClient.jobSubmit(
-                    "idle@1.0.0",
-                    JsonNodeFactory.instance.objectNode(),
-                    lease,
-                    constraints,
-                    null,
-                    null));
-            try {
-                handle.result().get(5, TimeUnit.SECONDS);
-                throw new AssertionError("expected LeaseExpiredException");
-            } catch (ExecutionException e) {
-                assert e.getCause() instanceof LeaseExpiredException
-                        : "got " + e.getCause();
-            }
-            release.countDown();
-            System.out.println("OK lease-expires-at");
-        }
-        runtime.close();
+    try (ArcpClient client = ArcpClient.builder(pair.client()).build()) {
+      client.connect(Duration.ofSeconds(5));
+      Lease lease = Lease.builder().allow("tool.call", "*").build();
+      LeaseConstraints constraints = LeaseConstraints.of(Instant.now().plusSeconds(1));
+      JobHandle handle =
+          client.submit(
+              ArcpClient.jobSubmit(
+                  "idle@1.0.0",
+                  JsonNodeFactory.instance.objectNode(),
+                  lease,
+                  constraints,
+                  null,
+                  null));
+      try {
+        handle.result().get(5, TimeUnit.SECONDS);
+        throw new AssertionError("expected LeaseExpiredException");
+      } catch (ExecutionException e) {
+        assert e.getCause() instanceof LeaseExpiredException : "got " + e.getCause();
+      }
+      release.countDown();
+      System.out.println("OK lease-expires-at");
     }
+    runtime.close();
+  }
 }
