@@ -12,7 +12,7 @@ Foundation module. No runtime, no client — only the types shared by both.
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-core:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-core:1.0.0")
 ```
 
 ## Packages

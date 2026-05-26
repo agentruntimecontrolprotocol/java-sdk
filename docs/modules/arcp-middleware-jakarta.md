@@ -13,7 +13,7 @@ Servlet container (Tomcat 10+, WildFly 27+, Payara 6+, etc.).
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-middleware-jakarta:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-middleware-jakarta:1.0.0")
 ```
 
 `jakarta.websocket-api` is `compileOnly` — the Servlet container provides it at

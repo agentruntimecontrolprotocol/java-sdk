@@ -121,7 +121,7 @@ arcp.websocket.enabled=true     # default
 Dependency:
 
 ```kotlin
-implementation("dev.arcp:arcp-middleware-spring-boot:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-middleware-spring-boot:1.0.0")
 ```
 
 ## Jakarta WebSocket
@@ -138,7 +138,7 @@ serverContainer.addEndpoint(config);
 Dependency:
 
 ```kotlin
-implementation("dev.arcp:arcp-middleware-jakarta:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-middleware-jakarta:1.0.0")
 ```
 
 ## Vert.x 5
@@ -157,7 +157,7 @@ vertx.createHttpServer()
 Dependency:
 
 ```kotlin
-implementation("dev.arcp:arcp-middleware-vertx:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-middleware-vertx:1.0.0")
 ```
 
 ## StdioTransport (§4.2)

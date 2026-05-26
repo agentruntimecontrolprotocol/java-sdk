@@ -15,13 +15,13 @@ parent-process orchestrators, test harnesses, in-process smoke tests).
 
 ```kotlin
 // Gradle (Kotlin DSL)
-implementation("dev.arcp:arcp:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp:1.0.0")
 ```
 
 ```xml
 <!-- Maven -->
 <dependency>
-  <groupId>dev.arcp</groupId>
+  <groupId>io.agentruntimecontrolprotocol</groupId>
   <artifactId>arcp</artifactId>
   <version>1.0.0</version>
 </dependency>

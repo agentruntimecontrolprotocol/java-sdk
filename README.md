@@ -3,7 +3,7 @@
 <p align="center"><strong>Java SDK for the Agent Runtime Control Protocol (ARCP) — submit, observe, and control long-running agent jobs from Java.</strong></p>
 
 <p align="center">
-  <a href="https://central.sonatype.com/artifact/dev.arcp/arcp"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/dev.arcp/arcp.svg?cb=20260525"></a>
+  <a href="https://central.sonatype.com/artifact/io.agentruntimecontrolprotocol/arcp"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/io.agentruntimecontrolprotocol/arcp.svg?cb=20260525"></a>
   <a href="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/agentruntimecontrolprotocol/java-sdk/actions/workflows/ci.yml/badge.svg?cb=20260525"></a>
   <a href="https://codecov.io/gh/agentruntimecontrolprotocol/java-sdk"><img alt="codecov" src="https://codecov.io/gh/agentruntimecontrolprotocol/java-sdk/graph/badge.svg?cb=20260525"></a>
   <a href="https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md"><img alt="ARCP" src="https://img.shields.io/badge/ARCP-v1.1%20draft-blue?cb=20260525"></a>
@@ -21,34 +21,34 @@
 
 ---
 
-`dev.arcp:arcp` is the Java reference implementation of [ARCP](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md), the Agent Runtime Control Protocol. It covers both sides of the wire — `arcp-client` for submitting and observing jobs, `arcp-runtime` for hosting agents (with `arcp-runtime-jetty` for networked WebSocket runtimes) — so either side can talk to any conformant peer in any language without hand-rolling the envelope, sequencing, or lease enforcement.
+`io.agentruntimecontrolprotocol:arcp` is the Java reference implementation of [ARCP](https://github.com/agentruntimecontrolprotocol/spec/blob/main/docs/draft-arcp-1.1.md), the Agent Runtime Control Protocol. It covers both sides of the wire — `arcp-client` for submitting and observing jobs, `arcp-runtime` for hosting agents (with `arcp-runtime-jetty` for networked WebSocket runtimes) — so either side can talk to any conformant peer in any language without hand-rolling the envelope, sequencing, or lease enforcement.
 
 ARCP itself is a transport-agnostic wire protocol for long-running AI agent jobs. It owns the parts of agent infrastructure that don't change between products — sessions, durable event streams, capability leases, budgets, resume — and stays out of the parts that do. ARCP wraps the agent function; it does not define how agents are built, how tools are exposed (that's MCP), or how telemetry is exported (that's OpenTelemetry).
 
 ## Installation
 
-Requires JDK 21 LTS. Artifacts are published to Maven Central as `dev.arcp:*`; the `arcp` umbrella re-exports `arcp-client` and `arcp-runtime`. Pull just the side you need à la carte, or pick up framework middleware (`arcp-middleware-spring-boot`, `-jakarta`, `-vertx`), the OpenTelemetry adapter (`arcp-otel`), and the Jetty WebSocket runtime (`arcp-runtime-jetty`) as needed:
+Requires JDK 21 LTS. Artifacts are published to Maven Central as `io.agentruntimecontrolprotocol:*`; the `arcp` umbrella re-exports `arcp-client` and `arcp-runtime`. Pull just the side you need à la carte, or pick up framework middleware (`arcp-middleware-spring-boot`, `-jakarta`, `-vertx`), the OpenTelemetry adapter (`arcp-otel`), and the Jetty WebSocket runtime (`arcp-runtime-jetty`) as needed:
 
 ```xml
 <!-- Maven -->
 <dependency>
-  <groupId>dev.arcp</groupId>
+  <groupId>io.agentruntimecontrolprotocol</groupId>
   <artifactId>arcp</artifactId>
   <version>1.0.0</version>
 </dependency>
 <!-- or, à la carte: -->
 <dependency>
-  <groupId>dev.arcp</groupId>
+  <groupId>io.agentruntimecontrolprotocol</groupId>
   <artifactId>arcp-client</artifactId>      <!-- client side -->
   <version>1.0.0</version>
 </dependency>
 <dependency>
-  <groupId>dev.arcp</groupId>
+  <groupId>io.agentruntimecontrolprotocol</groupId>
   <artifactId>arcp-runtime</artifactId>     <!-- runtime side -->
   <version>1.0.0</version>
 </dependency>
 <dependency>
-  <groupId>dev.arcp</groupId>
+  <groupId>io.agentruntimecontrolprotocol</groupId>
   <artifactId>arcp-runtime-jetty</artifactId> <!-- WebSocket server -->
   <version>1.0.0</version>
 </dependency>
@@ -57,7 +57,7 @@ Requires JDK 21 LTS. Artifacts are published to Maven Central as `dev.arcp:*`; t
 ```kotlin
 // Gradle (Kotlin DSL) — coordinates work in any JVM build tool
 dependencies {
-    implementation("dev.arcp:arcp:1.0.0")                  // umbrella (client + runtime)
+    implementation("io.agentruntimecontrolprotocol:arcp:1.0.0")                  // umbrella (client + runtime)
 }
 ```
 

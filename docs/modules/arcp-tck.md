@@ -13,7 +13,7 @@ any `Transport` adapter against the ARCP spec.
 ## Dependency
 
 ```kotlin
-testImplementation("dev.arcp:arcp-tck:1.0.0")
+testImplementation("io.agentruntimecontrolprotocol:arcp-tck:1.0.0")
 ```
 
 `arcp-tck` re-exports `arcp-core`, `arcp-client`, `arcp-runtime`, JUnit

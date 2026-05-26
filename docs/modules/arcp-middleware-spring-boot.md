@@ -13,7 +13,7 @@ declare an `ArcpRuntime` bean — the WebSocket endpoint registers itself.
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-middleware-spring-boot:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-middleware-spring-boot:1.0.0")
 ```
 
 ## Auto-configuration

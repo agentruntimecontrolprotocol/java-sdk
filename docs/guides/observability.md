@@ -16,7 +16,7 @@ creates a span per envelope send/receive.
 
 ```xml
 <!-- pom.xml -->
-<dependency><groupId>dev.arcp</groupId><artifactId>arcp-otel</artifactId><version>1.0.0</version></dependency>
+<dependency><groupId>io.agentruntimecontrolprotocol</groupId><artifactId>arcp-otel</artifactId><version>1.0.0</version></dependency>
 <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-api</artifactId><version>1.40.0</version></dependency>
 <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-sdk</artifactId><version>1.40.0</version><scope>runtime</scope></dependency>
 <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-exporter-otlp</artifactId><version>1.40.0</version><scope>runtime</scope></dependency>

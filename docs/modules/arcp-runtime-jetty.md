@@ -13,7 +13,7 @@ a single dependency and three lines of code.
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-runtime-jetty:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-runtime-jetty:1.0.0")
 ```
 
 ## Key classes

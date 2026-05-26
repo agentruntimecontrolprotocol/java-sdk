@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>dev.arcp</groupId>
+    <groupId>io.agentruntimecontrolprotocol</groupId>
     <artifactId>arcp-parent</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>arcp-parent</name>
     <description>Parent reactor for the ARCP Java SDK.</description>
-    <url>https://github.com/nficano/arpc</url>
+    <url>https://github.com/agentruntimecontrolprotocol/java-sdk</url>
     <inceptionYear>2025</inceptionYear>
 
     <licenses>
@@ -31,14 +31,14 @@
     </developers>
 
     <scm>
-        <url>https://github.com/nficano/arpc</url>
-        <connection>scm:git:https://github.com/nficano/arpc.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/nficano/arpc.git</developerConnection>
+        <url>https://github.com/agentruntimecontrolprotocol/java-sdk</url>
+        <connection>scm:git:https://github.com/agentruntimecontrolprotocol/java-sdk.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/agentruntimecontrolprotocol/java-sdk.git</developerConnection>
     </scm>
 
     <issueManagement>
         <system>GitHub</system>
-        <url>https://github.com/nficano/arpc/issues</url>
+        <url>https://github.com/agentruntimecontrolprotocol/java-sdk/issues</url>
     </issueManagement>
 
     <modules>
@@ -134,52 +134,52 @@
         <dependencies>
             <!-- Project modules -->
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-client</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-runtime</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-otel</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-runtime-jetty</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-middleware-jakarta</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-middleware-spring-boot</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-middleware-vertx</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>dev.arcp</groupId>
+                <groupId>io.agentruntimecontrolprotocol</groupId>
                 <artifactId>arcp-tck</artifactId>
                 <version>${project.version}</version>
             </dependency>

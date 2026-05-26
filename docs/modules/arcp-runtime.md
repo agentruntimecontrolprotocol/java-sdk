@@ -12,7 +12,7 @@ Runtime-side SDK. Host agents, enforce leases, manage sessions.
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-runtime:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-runtime:1.0.0")
 ```
 
 ## Key classes

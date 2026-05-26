@@ -13,7 +13,7 @@ server's `webSocketHandler`.
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-middleware-vertx:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-middleware-vertx:1.0.0")
 ```
 
 `io.vertx:vertx-core` is `compileOnly` — the Vert.x application provides it.

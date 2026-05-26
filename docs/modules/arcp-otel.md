@@ -13,7 +13,7 @@ every inbound and outbound envelope.
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-otel:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-otel:1.0.0")
 // OTel SDK (choose your exporter):
 implementation("io.opentelemetry:opentelemetry-sdk:1.x")
 runtimeOnly("io.opentelemetry:opentelemetry-exporter-otlp:1.x")

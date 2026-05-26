@@ -22,7 +22,7 @@ since: "1.0.0"
 
 ```kotlin
 dependencies {
-    implementation("dev.arcp:arcp:1.0.0")             // umbrella (client + runtime)
+    implementation("io.agentruntimecontrolprotocol:arcp:1.0.0")             // umbrella (client + runtime)
     runtimeOnly("ch.qos.logback:logback-classic:1.5.12")   // any SLF4J binding
 }
 ```
@@ -30,17 +30,17 @@ dependencies {
 Use granular artifacts if you only need one side:
 
 ```kotlin
-implementation("dev.arcp:arcp-client:1.0.0")          // client only
-implementation("dev.arcp:arcp-runtime:1.0.0")         // runtime only
-implementation("dev.arcp:arcp-runtime-jetty:1.0.0")   // Jetty WebSocket server
-implementation("dev.arcp:arcp-otel:1.0.0")            // OpenTelemetry tracing
+implementation("io.agentruntimecontrolprotocol:arcp-client:1.0.0")          // client only
+implementation("io.agentruntimecontrolprotocol:arcp-runtime:1.0.0")         // runtime only
+implementation("io.agentruntimecontrolprotocol:arcp-runtime-jetty:1.0.0")   // Jetty WebSocket server
+implementation("io.agentruntimecontrolprotocol:arcp-otel:1.0.0")            // OpenTelemetry tracing
 ```
 
 ### Maven
 
 ```xml
 <dependency>
-  <groupId>dev.arcp</groupId>
+  <groupId>io.agentruntimecontrolprotocol</groupId>
   <artifactId>arcp</artifactId>
   <version>1.0.0</version>
 </dependency>

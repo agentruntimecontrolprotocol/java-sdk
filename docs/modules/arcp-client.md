@@ -12,7 +12,7 @@ Client-side SDK. Submit jobs, observe events, await results.
 ## Dependency
 
 ```kotlin
-implementation("dev.arcp:arcp-client:1.0.0")
+implementation("io.agentruntimecontrolprotocol:arcp-client:1.0.0")
 ```
 
 ## Key classes

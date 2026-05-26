@@ -1,4 +1,4 @@
-# Contributing to dev.arcp:arcp
+# Contributing to io.agentruntimecontrolprotocol:arcp
 
 Thanks for your interest in improving the Java SDK for ARCP. This
 document covers how to report issues, propose changes, and get a change merged.
@@ -63,7 +63,7 @@ The build targets JDK 21 LTS (`--release 21`) and runs through Apache Maven
 your IDE's bundled copy), clone, and point `JAVA_HOME` at a JDK 21+:
 
 ```sh
-git clone https://github.com/nficano/arpc.git
+git clone https://github.com/agentruntimecontrolprotocol/java-sdk.git
 cd arpc/java-sdk
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # macOS; use your distro's equivalent
 mvn -version                                       # confirm Maven 3.9+ on JDK 21+
@@ -147,7 +147,7 @@ the changelog. Prefer clarity over cleverness in a library others build on.
 
 Releases are cut by maintainers. The `release` GitHub Actions workflow is
 dispatched manually with a version input; it builds, signs with the project
-PGP key, publishes the `dev.arcp:*` artifacts to Maven Central via the
+PGP key, publishes the `io.agentruntimecontrolprotocol:*` artifacts to Maven Central via the
 `central-publishing-maven-plugin`, and pushes a `vX.Y.Z` tag.
 Detailed operator steps live in [RELEASING.md](RELEASING.md). The SDK is
 versioned with semantic versioning independently of the protocol version it
