@@ -28,3 +28,6 @@ replay_pid*.log
 # jqwik failure-replay cache
 .jqwik-database
 **/.jqwik-database
+
+# Generated API reference (regenerate with `make docs-api`).
+docs/api/
