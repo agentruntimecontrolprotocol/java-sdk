@@ -9,9 +9,12 @@ import org.jspecify.annotations.Nullable;
  * §7.4 cancel acknowledgement. The runtime sends {@code job.cancelled} (carrying the job id in the
  * envelope) to acknowledge a {@code job.cancel}, followed by a terminal {@code job.error} with code
  * {@code CANCELLED}.
+ *
+ * @param reason human-readable cancellation reason, or {@code null}
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record JobCancelled(@Nullable String reason) implements Message {
+  /** Canonical constructor. */
   @JsonCreator
   public JobCancelled(@JsonProperty("reason") @Nullable String reason) {
     this.reason = reason;

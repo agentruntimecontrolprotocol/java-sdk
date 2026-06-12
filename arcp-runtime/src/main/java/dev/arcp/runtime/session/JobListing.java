@@ -20,10 +20,24 @@ public final class JobListing {
 
   private JobListing() {}
 
-  /** A page of job summaries plus the opaque cursor for the next page (or {@code null}). */
+  /**
+   * A page of job summaries plus the opaque cursor for the next page (or {@code null}).
+   *
+   * @param jobs the summaries for this page, in (createdAt, jobId) order
+   * @param nextCursor the cursor for the next page, or {@code null} when this page is the last
+   */
   public record Page(List<JobSummary> jobs, @Nullable String nextCursor) {}
 
   /**
+   * Computes one {@code session.list_jobs} result page (§6.6): jobs owned by {@code principal} that
+   * match {@code filter}, in stable (createdAt, jobId) order, sliced at {@code cursor}.
+   *
+   * @param jobs the runtime's job registry to filter
+   * @param principal the requesting principal; only that principal's jobs are visible
+   * @param filter the requested status/agent/created-after filter
+   * @param limit the maximum page size, or {@code null}/non-positive for no limit
+   * @param cursor the opaque cursor from a prior page, or {@code null} to start at the beginning
+   * @return the matching page and, when more results remain, the cursor for the next one
    * @throws IllegalArgumentException if {@code cursor} is non-blank but not a valid cursor
    */
   public static Page page(

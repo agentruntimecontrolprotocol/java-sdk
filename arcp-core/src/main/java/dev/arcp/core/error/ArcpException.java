@@ -3,26 +3,61 @@ package dev.arcp.core.error;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Base of the sealed exception hierarchy mirroring the §12 error taxonomy. Every instance carries
+ * an {@link ErrorCode}; the {@link RetryableArcpException} / {@link NonRetryableArcpException}
+ * branches fix the {@link #retryable()} flag.
+ */
 public abstract sealed class ArcpException extends Exception
     permits RetryableArcpException, NonRetryableArcpException {
 
+  /** The §12 error code carried by this exception. */
   private final ErrorCode code;
 
+  /**
+   * Creates an exception without a cause.
+   *
+   * @param code the §12 error code
+   * @param message human-readable detail
+   */
   protected ArcpException(ErrorCode code, String message) {
     this(code, message, null);
   }
 
+  /**
+   * Creates an exception with an optional cause.
+   *
+   * @param code the §12 error code
+   * @param message human-readable detail
+   * @param cause the underlying cause, or {@code null}
+   */
   protected ArcpException(ErrorCode code, String message, @Nullable Throwable cause) {
     super(message, cause);
     this.code = Objects.requireNonNull(code, "code");
   }
 
+  /**
+   * Returns the §12 error code.
+   *
+   * @return the error code
+   */
   public ErrorCode code() {
     return code;
   }
 
+  /**
+   * Returns whether retrying the failed operation may succeed, per the §12 taxonomy.
+   *
+   * @return {@code true} if a retry may succeed
+   */
   public abstract boolean retryable();
 
+  /**
+   * Maps a wire error payload to its typed exception.
+   *
+   * @param p the decoded error payload
+   * @return the exception subtype matching {@code p.code()}
+   */
   public static ArcpException from(ErrorPayload p) {
     return switch (p.code()) {
       case PERMISSION_DENIED -> new PermissionDeniedException(p.message());

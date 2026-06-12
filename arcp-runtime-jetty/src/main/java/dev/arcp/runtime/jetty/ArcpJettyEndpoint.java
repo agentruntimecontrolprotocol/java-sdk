@@ -18,9 +18,16 @@ public final class ArcpJettyEndpoint extends Endpoint {
 
   private static final Logger log = LoggerFactory.getLogger(ArcpJettyEndpoint.class);
 
+  /**
+   * {@link EndpointConfig#getUserProperties()} key under which {@link ArcpJettyServer} stashes the
+   * {@link ArcpRuntime} that accepted sessions are handed to.
+   */
   public static final String RUNTIME_KEY = ArcpRuntime.class.getName();
 
   private final Map<String, WebSocketJsonTransport> transports = new ConcurrentHashMap<>();
+
+  /** Creates an endpoint instance; {@link ArcpJettyServer} builds one per accepted session. */
+  public ArcpJettyEndpoint() {}
 
   @Override
   public void onOpen(Session session, EndpointConfig config) {

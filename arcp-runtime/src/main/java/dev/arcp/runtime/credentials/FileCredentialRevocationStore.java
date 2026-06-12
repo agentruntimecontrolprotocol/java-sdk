@@ -15,6 +15,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Durable {@link CredentialRevocationStore} backed by an append-only JSON-lines log. Each {@code
+ * record}/{@code revoke} entry is appended and fsynced before the call returns; on construction the
+ * log is replayed to rebuild the outstanding set, so a restarted runtime can resume revoking
+ * credentials issued before a crash (§9.8.2).
+ */
 public final class FileCredentialRevocationStore
     implements CredentialRevocationStore, AutoCloseable {
   private final Path path;
@@ -22,10 +28,24 @@ public final class FileCredentialRevocationStore
   private final Map<CredentialId, String> outstanding = new LinkedHashMap<>();
   private final RandomAccessFile writer;
 
+  /**
+   * Opens the store at {@code path} (creating the file and parent directories if absent) using the
+   * shared wire mapper.
+   *
+   * @param path the log file location
+   */
   public FileCredentialRevocationStore(Path path) {
     this(path, ArcpMapper.shared());
   }
 
+  /**
+   * Opens the store at {@code path} (creating the file and parent directories if absent), replaying
+   * any existing log entries to rebuild the outstanding set.
+   *
+   * @param path the log file location
+   * @param mapper the Jackson mapper used to read and write log entries
+   * @throws IllegalStateException if the log cannot be created, read, or opened for append
+   */
   public FileCredentialRevocationStore(Path path, ObjectMapper mapper) {
     this.path = path;
     this.mapper = mapper;

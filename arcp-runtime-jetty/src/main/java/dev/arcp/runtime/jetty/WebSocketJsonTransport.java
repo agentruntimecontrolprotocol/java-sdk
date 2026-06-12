@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Bridges a Jakarta WebSocket {@link Session} to the ARCP {@link Transport} SPI. JSON envelopes
- * ride as text frames per §4.1.
+ * ride as text frames per §4.
  */
 final class WebSocketJsonTransport implements Transport {
 

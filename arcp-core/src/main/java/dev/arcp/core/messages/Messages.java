@@ -13,6 +13,14 @@ public final class Messages {
 
   private Messages() {}
 
+  /**
+   * Decodes an envelope's {@code payload} into the typed message named by its {@code type}.
+   *
+   * @param mapper the mapper to use
+   * @param envelope the envelope to decode
+   * @return the typed message
+   * @throws IllegalArgumentException if the envelope {@code type} is unknown
+   */
   public static Message decode(ObjectMapper mapper, Envelope envelope) {
     Message.Type type = Message.Type.fromWire(envelope.type());
     JsonNode payload = envelope.payload();
@@ -39,6 +47,14 @@ public final class Messages {
     };
   }
 
+  /**
+   * Encodes a message as the JSON object carried in an envelope's {@code payload}.
+   *
+   * @param mapper the mapper to use
+   * @param m the message to encode
+   * @return the payload object
+   * @throws IllegalStateException if the message does not serialize to a JSON object
+   */
   public static ObjectNode encodePayload(ObjectMapper mapper, Message m) {
     JsonNode tree = mapper.valueToTree(m);
     if (!tree.isObject()) {

@@ -25,9 +25,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Client-side ARCP {@link Transport} backed by the JDK {@link java.net.http.HttpClient.WebSocket}.
- * JSON envelopes ride as text frames; multi-part text frames are reassembled per {@code last}
- * delivery.
+ * Client-side ARCP {@link Transport} backed by the JDK {@link java.net.http.WebSocket}. JSON
+ * envelopes ride as text frames; multi-part text frames are reassembled per {@code last} delivery.
  */
 public final class WebSocketTransport implements Transport {
 
@@ -52,11 +51,31 @@ public final class WebSocketTransport implements Transport {
     this.socket = socket;
   }
 
-  /** Open a WebSocket connection to {@code uri} and return a connected transport. */
+  /**
+   * Opens a WebSocket connection to {@code uri} with no extra headers, the shared {@link
+   * ArcpMapper}, and a 10-second connect timeout.
+   *
+   * @param uri the {@code ws://} or {@code wss://} endpoint of the ARCP runtime
+   * @return a connected transport ready for {@link #send} and {@link #incoming()}
+   * @throws InterruptedException if the calling thread is interrupted while awaiting the WebSocket
+   *     handshake
+   */
   public static WebSocketTransport connect(URI uri) throws InterruptedException {
     return connect(uri, Map.of(), ArcpMapper.shared(), Duration.ofSeconds(10));
   }
 
+  /**
+   * Opens a WebSocket connection to {@code uri} and returns a connected transport. The transport
+   * owns the underlying {@link HttpClient}; {@link #close()} releases it.
+   *
+   * @param uri the {@code ws://} or {@code wss://} endpoint of the ARCP runtime
+   * @param headers extra HTTP headers sent with the upgrade request (e.g. authentication)
+   * @param mapper Jackson mapper used to encode and decode {@link Envelope} frames
+   * @param timeout maximum time to wait for the WebSocket handshake to complete
+   * @return a connected transport ready for {@link #send} and {@link #incoming()}
+   * @throws InterruptedException if the calling thread is interrupted while awaiting the WebSocket
+   *     handshake
+   */
   public static WebSocketTransport connect(
       URI uri, Map<String, String> headers, ObjectMapper mapper, Duration timeout)
       throws InterruptedException {

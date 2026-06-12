@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-client</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-client</name>
     <description>ARCP client SDK.</description>
 

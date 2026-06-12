@@ -38,11 +38,21 @@ public final class ArcpJakartaAdapter {
     this.allowedOrigins = List.copyOf(b.allowedOrigins);
   }
 
+  /**
+   * Returns a new builder.
+   *
+   * @return a fresh builder with the default {@code /arcp} path and empty allowlists
+   */
   public static Builder builder() {
     return new Builder();
   }
 
-  /** Build the {@link ServerEndpointConfig} ready to hand to a container. */
+  /**
+   * Builds the {@link ServerEndpointConfig} ready to hand to a container.
+   *
+   * @return a config that mounts an ARCP WebSocket endpoint, serving JSON envelopes as text frames
+   *     per §4, at the configured path
+   */
   public ServerEndpointConfig serverEndpointConfig() {
     // The Jakarta WebSocket API offers no veto in modifyHandshake: clearing response headers does
     // not stop the server from completing the upgrade, so a client that ignores
@@ -89,48 +99,104 @@ public final class ArcpJakartaAdapter {
     return config;
   }
 
+  /**
+   * Returns the runtime accepted sessions are handed to.
+   *
+   * @return the configured {@link ArcpRuntime}
+   */
   public ArcpRuntime runtime() {
     return runtime;
   }
 
+  /**
+   * Returns the request path the endpoint is mounted at.
+   *
+   * @return the endpoint path, {@code /arcp} by default
+   */
   public String path() {
     return path;
   }
 
+  /**
+   * Returns the {@code Host} header allowlist enforced during the handshake (§14).
+   *
+   * @return the allowed {@code Host} values; empty means all hosts are accepted
+   */
   public List<String> allowedHosts() {
     return allowedHosts;
   }
 
+  /**
+   * Returns the {@code Origin} header allowlist checked during the handshake (§14).
+   *
+   * @return the allowed {@code Origin} values; empty means all origins are accepted
+   */
   public List<String> allowedOrigins() {
     return allowedOrigins;
   }
 
+  /** Builder for {@link ArcpJakartaAdapter}. */
   public static final class Builder {
     private ArcpRuntime runtime;
     private String path = "/arcp";
     private List<String> allowedHosts = List.of();
     private List<String> allowedOrigins = List.of();
 
+    /** Creates a builder with the default {@code /arcp} path and empty allowlists. */
+    public Builder() {}
+
+    /**
+     * Sets the runtime that accepted sessions are handed to; required.
+     *
+     * @param runtime the ARCP runtime
+     * @return this builder
+     */
     public Builder runtime(ArcpRuntime runtime) {
       this.runtime = runtime;
       return this;
     }
 
+    /**
+     * Sets the request path the endpoint is mounted at; defaults to {@code /arcp}.
+     *
+     * @param path the endpoint path
+     * @return this builder
+     */
     public Builder path(String path) {
       this.path = path;
       return this;
     }
 
+    /**
+     * Sets the {@code Host} header allowlist; sessions from any other host are closed before the
+     * runtime sees them (§14). An empty list (the default) disables the check.
+     *
+     * @param hosts the allowed {@code Host} header values
+     * @return this builder
+     */
     public Builder allowedHosts(List<String> hosts) {
       this.allowedHosts = List.copyOf(hosts);
       return this;
     }
 
+    /**
+     * Sets the {@code Origin} header allowlist; handshakes from any other origin are refused (§14).
+     * An empty list (the default) accepts all origins.
+     *
+     * @param origins the allowed {@code Origin} header values
+     * @return this builder
+     */
     public Builder allowedOrigins(List<String> origins) {
       this.allowedOrigins = List.copyOf(origins);
       return this;
     }
 
+    /**
+     * Builds the adapter.
+     *
+     * @return the configured adapter; pass {@link ArcpJakartaAdapter#serverEndpointConfig()} to the
+     *     container
+     */
     public ArcpJakartaAdapter build() {
       return new ArcpJakartaAdapter(this);
     }

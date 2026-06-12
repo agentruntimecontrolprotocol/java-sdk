@@ -23,6 +23,14 @@ public final class IdempotencyFingerprint {
 
   private IdempotencyFingerprint() {}
 
+  /**
+   * Computes the canonical fingerprint of a submission, used by the runtime to decide whether a
+   * reused {@code idempotency_key} carries identical parameters (§7.2).
+   *
+   * @param mapper the wire mapper; copied and reconfigured for canonical (sorted-key) output
+   * @param submit the submission to fingerprint
+   * @return the lowercase hex SHA-256 of the canonical serialization
+   */
   public static String of(ObjectMapper mapper, JobSubmit submit) {
     try {
       ObjectMapper canonical = mapper.copy();

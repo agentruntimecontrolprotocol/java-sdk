@@ -18,6 +18,11 @@ public final class ArcpWebSocketHandler extends TextWebSocketHandler {
   private final ConcurrentHashMap<String, SpringWebSocketTransport> transports =
       new ConcurrentHashMap<>();
 
+  /**
+   * Creates a handler that hands each accepted WebSocket session to {@code runtime}.
+   *
+   * @param runtime the ARCP runtime; must not be {@code null}
+   */
   public ArcpWebSocketHandler(ArcpRuntime runtime) {
     this.runtime = Objects.requireNonNull(runtime, "runtime");
   }

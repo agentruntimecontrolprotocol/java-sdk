@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-middleware-jakarta</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-middleware-jakarta</name>
     <description>Jakarta WebSocket endpoint adapter for ARCP runtimes.</description>
 

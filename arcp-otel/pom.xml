@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-otel</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-otel</name>
     <description>OpenTelemetry adapter for ARCP transports.</description>
 

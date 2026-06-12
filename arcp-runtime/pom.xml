@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-runtime</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-runtime</name>
     <description>ARCP runtime SDK.</description>
 

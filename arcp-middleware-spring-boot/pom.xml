@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-middleware-spring-boot</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-middleware-spring-boot</name>
     <description>Spring Boot 3.x adapter for ARCP runtimes.</description>
 

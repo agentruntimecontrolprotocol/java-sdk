@@ -17,19 +17,38 @@ import org.jspecify.annotations.Nullable;
  */
 public final class ResultStream {
 
+  /** Raised when chunks remain pending after the terminal chunk ({@code more=false}, §8.4). */
   public static final class OutOfOrderChunkException extends RuntimeException {
+    /**
+     * Creates the exception with a description of the ordering violation.
+     *
+     * @param message detail of the violation, including the orphaned {@code chunk_seq} values
+     */
     public OutOfOrderChunkException(String message) {
       super(message);
     }
   }
 
+  /** Raised when a {@code chunk_seq} that was already flushed or buffered arrives again (§8.4). */
   public static final class DuplicateChunkException extends RuntimeException {
+    /**
+     * Creates the exception for the duplicated sequence number.
+     *
+     * @param chunkSeq the {@code chunk_seq} that was delivered more than once
+     */
     public DuplicateChunkException(long chunkSeq) {
       super("duplicate chunk_seq " + chunkSeq);
     }
   }
 
+  /** Raised when a chunk's {@code encoding} differs from the first chunk's encoding (§8.4). */
   public static final class EncodingMismatchException extends RuntimeException {
+    /**
+     * Creates the exception describing the encoding switch.
+     *
+     * @param first the encoding declared by the first chunk
+     * @param later the conflicting encoding declared by a later chunk
+     */
     public EncodingMismatchException(String first, String later) {
       super("encoding switched mid-stream: " + first + " -> " + later);
     }
@@ -48,16 +67,35 @@ public final class ResultStream {
     this.sink = sink;
   }
 
-  /** In-memory sink; {@link #bytes()} returns the assembled output. */
+  /**
+   * In-memory sink; {@link #bytes()} returns the assembled output.
+   *
+   * @param resultId expected {@code result_id}, or {@code null} to accept chunks for any result
+   * @return a stream that assembles chunks into an in-memory buffer
+   */
   public static ResultStream toMemory(@Nullable ResultId resultId) {
     return new ResultStream(resultId, new ByteArrayOutputStream());
   }
 
-  /** Stream chunks directly to an arbitrary {@link OutputStream}. */
+  /**
+   * Stream chunks directly to an arbitrary {@link OutputStream}.
+   *
+   * @param resultId expected {@code result_id}, or {@code null} to accept chunks for any result
+   * @param sink destination for decoded chunk bytes; flushed when the terminal chunk lands
+   * @return a stream that writes assembled output to {@code sink}
+   */
   public static ResultStream toSink(@Nullable ResultId resultId, OutputStream sink) {
     return new ResultStream(resultId, sink);
   }
 
+  /**
+   * Accepts one {@code result_chunk} event (§8.4), buffering it until its predecessors arrive and
+   * then flushing in {@code chunk_seq} order. The terminal chunk ({@code more=false}) completes the
+   * stream and flushes the sink.
+   *
+   * @param chunk the chunk to ingest; its {@code result_id} must match this stream's, if set
+   * @throws IOException if writing the decoded bytes to the sink fails
+   */
   public synchronized void accept(ResultChunkEvent chunk) throws IOException {
     if (closed) {
       throw new IllegalStateException("ResultStream already closed");
@@ -108,15 +146,29 @@ public final class ResultStream {
     };
   }
 
+  /**
+   * Returns whether the terminal chunk ({@code more=false}) has been flushed.
+   *
+   * @return {@code true} once the stream is complete and no further chunks are accepted
+   */
   public synchronized boolean isComplete() {
     return closed;
   }
 
+  /**
+   * Returns the number of decoded bytes flushed to the sink so far.
+   *
+   * @return the running count of bytes written, excluding still-pending out-of-order chunks
+   */
   public synchronized long bytesWritten() {
     return bytesWritten;
   }
 
-  /** Assembled bytes from an in-memory stream; throws if a non-memory sink is in use. */
+  /**
+   * Assembled bytes from an in-memory stream; throws if a non-memory sink is in use.
+   *
+   * @return the bytes flushed so far to the in-memory buffer created by {@link #toMemory}
+   */
   public synchronized byte[] bytes() {
     if (!(sink instanceof ByteArrayOutputStream baos)) {
       throw new IllegalStateException("ResultStream sink is not in-memory");

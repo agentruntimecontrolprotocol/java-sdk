@@ -65,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Flow;
 import java.util.concurrent.ScheduledFuture;
@@ -82,10 +83,15 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
   private static final Logger log = LoggerFactory.getLogger(SessionLoop.class);
 
+  /** Lifecycle of one session loop. */
   public enum Phase {
+    /** Transport attached; no {@code session.hello} processed yet (§6.2). */
     AWAITING_HELLO,
+    /** Handshake complete; dispatching messages. */
     ACTIVE,
+    /** Transport dropped unexpectedly; held for the resume window (§6.3). */
     PARKED,
+    /** Torn down; the loop never leaves this phase. */
     CLOSED
   }
 
@@ -121,9 +127,22 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
   private final Set<JobId> ownedJobs = ConcurrentHashMap.newKeySet();
 
+  // #109: acceptance epilogues (credential issuance completion → job.accepted → worker start) are
+  // chained through this sequence so job.accepted preserves submit order — clients correlate
+  // acceptances FIFO — while the dispatch thread never blocks on a slow provisioner. Written only
+  // from the dispatch thread; volatile so a resumed session's new dispatch thread sees the tail.
+  private volatile CompletableFuture<?> acceptSequence = CompletableFuture.completedFuture(null);
+
   @SuppressWarnings("unused")
   private Flow.@Nullable Subscription subscription;
 
+  /**
+   * Creates a loop serving one transport with the runtime's shared services; call {@link #start} to
+   * begin consuming inbound envelopes.
+   *
+   * @param runtime the owning runtime supplying mapper, agents, clock, and executors
+   * @param transport the connected transport this session speaks over
+   */
   public SessionLoop(ArcpRuntime runtime, Transport transport) {
     this.runtime = runtime;
     this.transport = transport;
@@ -139,16 +158,26 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             this::emitJobEvent);
   }
 
+  /**
+   * Returns the best identity currently available for logging and map keys.
+   *
+   * @return the session id once the §6.2 handshake assigned one, otherwise the pending id
+   */
   public String idOrPending() {
     SessionId s = sessionId;
     return s == null ? pendingId : s.value();
   }
 
-  /** Stable key used at session insertion time; never flips even after handshake. */
+  /**
+   * Returns the stable key used at session insertion time; never flips even after handshake.
+   *
+   * @return the pending id minted at construction
+   */
   public String pendingKey() {
     return pendingId;
   }
 
+  /** Subscribes this loop to the transport's inbound envelopes, beginning dispatch. */
   public void start() {
     transport.incoming().subscribe(this);
   }
@@ -231,6 +260,13 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     }
   }
 
+  /**
+   * Tears the session down immediately: cancels heartbeats and in-flight jobs, revokes their
+   * credentials, and closes the transport. Idempotent; unlike a §6.3 park, the session cannot be
+   * resumed afterwards.
+   *
+   * @param reason a short human-readable cause recorded in logs
+   */
   public void shutdown(String reason) {
     Phase prev = phase.getAndSet(Phase.CLOSED);
     if (prev == Phase.CLOSED) {
@@ -564,7 +600,19 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
         if (runtime.idempotency().matchesPayload(pr, idempotencyKey, fingerprint)) {
           JobRecord prior = runtime.job(conflict.existing());
           if (prior != null) {
-            emitReplayAccepted(prior, envelope.traceId());
+            // Chained behind in-flight acceptances so a replayed job.accepted cannot overtake the
+            // original acceptance (clients correlate FIFO, #109) and observes the budget captured
+            // by that acceptance (#79).
+            TraceId replayTrace = envelope.traceId();
+            acceptSequence =
+                acceptSequence.thenRun(
+                    () -> {
+                      try {
+                        emitReplayAccepted(prior, replayTrace);
+                      } catch (RuntimeException e) {
+                        log.warn("idempotent replay emit failed: {}", e.toString());
+                      }
+                    });
             return;
           }
           // Same key + identical params, but the prior job was never registered or was removed (a
@@ -656,30 +704,89 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     runtime.registerJob(record);
     ownedJobs.add(jobId);
 
-    List<Credential> credentials = List.of();
+    CompletableFuture<List<IssuedCredential>> issuance;
     if (negotiated.contains(Feature.PROVISIONED_CREDENTIALS)) {
       try {
-        List<IssuedCredential> issued =
-            runtime.credentialProvisioner().issue(lease, constraints, issueContext(record)).join();
-        credentials = credentialBinding.attach(record, issued);
+        issuance = runtime.credentialProvisioner().issue(lease, constraints, issueContext(record));
       } catch (RuntimeException e) {
-        ownedJobs.remove(jobId);
-        runtime.removeJob(jobId);
-        releaseIdempotency(pr, idempotencyKey, jobId);
-        Throwable root = rootCause(e);
-        if (root instanceof UpstreamBudgetExhaustedException budgetError) {
-          sendJobErrorTopLevel(envelope, ErrorCode.BUDGET_EXHAUSTED, budgetError.getMessage());
-        } else {
-          sendJobErrorTopLevel(
-              envelope,
-              ErrorCode.INTERNAL_ERROR,
-              root.getMessage() != null ? root.getMessage() : root.getClass().getSimpleName());
-        }
-        return;
+        issuance = CompletableFuture.failedFuture(e);
       }
+    } else {
+      issuance = CompletableFuture.completedFuture(List.of());
     }
 
-    Map<String, BigDecimal> budgetSnapshot = budget.snapshot();
+    // §6.4/#109: never block the dispatch thread on credential issuance — a slow provisioner would
+    // leave pings unanswered (provoking HEARTBEAT_LOST teardown of a healthy session) and
+    // head-of-line-block every other message on the session. The epilogue runs when issuance
+    // completes, chained behind the previous acceptance so job.accepted keeps submit order.
+    CompletableFuture<?> previous = acceptSequence;
+    acceptSequence =
+        previous.thenCombine(
+            issuance.handle(IssueOutcome::new),
+            (ignored, outcome) -> {
+              try {
+                finishAccept(envelope, submit, record, resolved, idempotencyKey, outcome);
+              } catch (RuntimeException e) {
+                log.warn("acceptance epilogue failed for {}: {}", jobId, e.toString());
+              }
+              return null;
+            });
+  }
+
+  /** Result of a credential issuance attempt: exactly one of issued/failure is set. */
+  private record IssueOutcome(
+      @Nullable List<IssuedCredential> issued, @Nullable Throwable failure) {}
+
+  /**
+   * Completes a job acceptance once credential issuance has resolved: attaches credentials, sends
+   * {@code job.accepted}, starts the worker, and schedules the lease/runtime watchdogs. Runs off
+   * the dispatch thread, sequenced per session in submit order (#109).
+   */
+  private void finishAccept(
+      Envelope envelope,
+      JobSubmit submit,
+      JobRecord record,
+      AgentRegistry.Resolved resolved,
+      @Nullable String idempotencyKey,
+      IssueOutcome outcome) {
+    JobId jobId = record.jobId();
+    Principal pr = record.principal();
+    List<Credential> credentials;
+    try {
+      if (outcome.failure() != null) {
+        throw new IllegalStateException(outcome.failure());
+      }
+      List<IssuedCredential> issued = outcome.issued() != null ? outcome.issued() : List.of();
+      credentials = credentialBinding.attach(record, issued);
+    } catch (RuntimeException e) {
+      ownedJobs.remove(jobId);
+      runtime.removeJob(jobId);
+      releaseIdempotency(pr, idempotencyKey, jobId);
+      Throwable root = rootCause(e);
+      if (root instanceof UpstreamBudgetExhaustedException budgetError) {
+        sendJobErrorTopLevel(envelope, ErrorCode.BUDGET_EXHAUSTED, budgetError.getMessage());
+      } else {
+        sendJobErrorTopLevel(
+            envelope,
+            ErrorCode.INTERNAL_ERROR,
+            root.getMessage() != null ? root.getMessage() : root.getClass().getSimpleName());
+      }
+      return;
+    }
+
+    // The session may have been torn down (or the job cancelled by a watchdog) while issuance was
+    // in flight. Revoke what was just minted and do not announce or start a job on a dead session;
+    // runJob's RUNNING transition guard (#104) covers the narrower post-check race.
+    if (record.status().terminal() || phase.get() == Phase.CLOSED) {
+      credentialBinding.revokeAll(record);
+      return;
+    }
+
+    Instant now = record.createdAt();
+    Lease lease = record.lease();
+    LeaseConstraints constraints = record.constraints();
+    TraceId traceId = record.traceId();
+    Map<String, BigDecimal> budgetSnapshot = record.budget().snapshot();
     // §7.2: capture the budget returned at acceptance so an idempotent replay returns the same
     // payload regardless of intervening spend (#79).
     record.setAcceptedBudget(budgetSnapshot);
@@ -699,9 +806,11 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     // before setWorker and lose the interrupt (#104).
     record.setWorker(runtime.workerPool().submit(() -> runJob(record, resolved.agent(), submit)));
 
-    // §9.5 watchdog: terminate the job if the lease expires.
+    // §9.5 watchdog: terminate the job if the lease expires. The delay is measured from the
+    // current clock, not submit time — issuance latency must not postpone an absolute expires_at.
     if (constraints.expiresAt() != null) {
-      long delayMillis = Duration.between(now, constraints.expiresAt()).toMillis();
+      long delayMillis =
+          Duration.between(runtime.clock().instant(), constraints.expiresAt()).toMillis();
       ScheduledFuture<?> watchdog =
           runtime
               .scheduler()
@@ -1189,18 +1298,39 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     return env;
   }
 
+  /**
+   * Returns the effective feature set: the intersection of {@code session.hello} and {@code
+   * session.welcome} features (§6.2).
+   *
+   * @return an unmodifiable view of the negotiated features; empty before the handshake
+   */
   public Set<Feature> negotiated() {
     return java.util.Collections.unmodifiableSet(negotiated);
   }
 
+  /**
+   * Returns the session's identity.
+   *
+   * @return the session id, or {@code null} before the §6.2 handshake completes
+   */
   public @Nullable SessionId sessionId() {
     return sessionId;
   }
 
+  /**
+   * Returns the principal authenticated by the §6.1 bearer token.
+   *
+   * @return the principal, or {@code null} before the handshake completes
+   */
   public @Nullable Principal principal() {
     return principal;
   }
 
+  /**
+   * Returns the loop's current lifecycle phase.
+   *
+   * @return the current {@link Phase}
+   */
   public Phase phase() {
     return phase.get();
   }
