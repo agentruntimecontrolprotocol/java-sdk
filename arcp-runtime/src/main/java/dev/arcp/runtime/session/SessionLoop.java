@@ -332,7 +332,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       case JobSubscribe sub -> handleSubscribe(envelope, sub);
       case JobUnsubscribe unsub -> handleUnsubscribe(unsub);
       case SessionClosed ignored -> log.warn("client-only message received: {}", m);
-      case JobCancelled ignored -> log.warn("client-only message received: {}", m);
+      case JobCancelled jc -> log.warn("client-only message received: {}", jc);
       case SessionWelcome ignored -> log.warn("client-only message received: {}", m);
       case JobAccepted ignored -> log.warn("client-only message received: {}", m);
       case JobEvent ignored -> log.warn("client-only message received: {}", m);
