@@ -123,11 +123,17 @@ public final class ArcpRuntime implements AutoCloseable {
   /** Attach a transport; the returned handle is closed on session.bye or transport close. */
   public SessionLoop accept(Transport transport) {
     SessionLoop loop = new SessionLoop(this, transport);
-    loop.start();
+    // Insert before start() so that if the transport completes/errors synchronously during start
+    // (e.g. an already-closed transport), shutdown -> removeSession finds and removes this entry
+    // instead of racing a later put that would leave a zombie CLOSED loop in the map (#107).
     // Always key by the stable pending id, not idOrPending() — the latter flips to the
     // real session id after handshake and would leave the map keyed by a now-orphaned
     // string, so removeSession would never find the entry (#23).
     sessions.put(loop.pendingKey(), loop);
+    loop.start();
+    if (loop.phase() == SessionLoop.Phase.CLOSED) {
+      removeSession(loop);
+    }
     return loop;
   }
 

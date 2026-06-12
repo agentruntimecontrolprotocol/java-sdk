@@ -6,13 +6,17 @@ import dev.arcp.core.ids.JobId;
 import dev.arcp.core.ids.TraceId;
 import dev.arcp.core.lease.Lease;
 import dev.arcp.core.lease.LeaseConstraints;
-import dev.arcp.core.wire.Envelope;
+import dev.arcp.core.messages.JobEvent;
 import dev.arcp.runtime.credentials.IssuedCredential;
 import dev.arcp.runtime.lease.BudgetCounters;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
@@ -47,6 +51,12 @@ public final class JobRecord {
     }
   }
 
+  /** Default per-job event-history cap when none is supplied (e.g. in unit tests). */
+  public static final int DEFAULT_HISTORY_CAPACITY = 1024;
+
+  /** A recorded event retained for §7.6 subscribe-history replay. */
+  public record RecordedEvent(long producerSeq, JobEvent event) {}
+
   private final JobId jobId;
   private final String resolvedAgent;
   private final Principal principal;
@@ -55,12 +65,17 @@ public final class JobRecord {
   private final BudgetCounters budget;
   private final Instant createdAt;
   private final @Nullable TraceId traceId;
+  private final int historyCapacity;
   private final AtomicReference<Status> status = new AtomicReference<>(Status.PENDING);
   private final AtomicReference<@Nullable Long> lastEventSeq = new AtomicReference<>(null);
-  private final CopyOnWriteArrayList<Envelope> eventHistory = new CopyOnWriteArrayList<>();
+  // Bounded ring of recent events (§7.6: replay is bounded by the resume buffer window). Guarded by
+  // its own monitor; appends are O(1) and the buffer never grows past historyCapacity.
+  private final Deque<RecordedEvent> eventHistory = new ArrayDeque<>();
   private final CopyOnWriteArrayList<Subscriber> subscribers = new CopyOnWriteArrayList<>();
   private volatile @Nullable Future<?> worker;
   private volatile @Nullable ScheduledFuture<?> expiryWatchdog;
+  private volatile @Nullable ScheduledFuture<?> maxRuntimeWatchdog;
+  private volatile @Nullable Map<String, BigDecimal> acceptedBudget;
   private final Object credentialsLock = new Object();
   private final ArrayList<IssuedCredential> credentials = new ArrayList<>();
 
@@ -73,6 +88,28 @@ public final class JobRecord {
       BudgetCounters budget,
       Instant createdAt,
       @Nullable TraceId traceId) {
+    this(
+        jobId,
+        resolvedAgent,
+        principal,
+        lease,
+        constraints,
+        budget,
+        createdAt,
+        traceId,
+        DEFAULT_HISTORY_CAPACITY);
+  }
+
+  public JobRecord(
+      JobId jobId,
+      String resolvedAgent,
+      Principal principal,
+      Lease lease,
+      LeaseConstraints constraints,
+      BudgetCounters budget,
+      Instant createdAt,
+      @Nullable TraceId traceId,
+      int historyCapacity) {
     this.jobId = jobId;
     this.resolvedAgent = resolvedAgent;
     this.principal = principal;
@@ -81,6 +118,7 @@ public final class JobRecord {
     this.budget = budget;
     this.createdAt = createdAt;
     this.traceId = traceId;
+    this.historyCapacity = historyCapacity > 0 ? historyCapacity : DEFAULT_HISTORY_CAPACITY;
   }
 
   public JobId jobId() {
@@ -146,6 +184,23 @@ public final class JobRecord {
     return expiryWatchdog;
   }
 
+  public void setMaxRuntimeWatchdog(ScheduledFuture<?> watchdog) {
+    this.maxRuntimeWatchdog = watchdog;
+  }
+
+  public @Nullable ScheduledFuture<?> maxRuntimeWatchdog() {
+    return maxRuntimeWatchdog;
+  }
+
+  /** Snapshot of the budget map returned in the original {@code job.accepted} (§7.2 replay). */
+  public void setAcceptedBudget(Map<String, BigDecimal> snapshot) {
+    this.acceptedBudget = Map.copyOf(snapshot);
+  }
+
+  public @Nullable Map<String, BigDecimal> acceptedBudget() {
+    return acceptedBudget;
+  }
+
   public void setLastEventSeq(long seq) {
     lastEventSeq.set(seq);
   }
@@ -154,14 +209,25 @@ public final class JobRecord {
     return lastEventSeq.get();
   }
 
-  public void recordEvent(Envelope envelope) {
-    eventHistory.add(envelope);
+  public void recordEvent(long producerSeq, JobEvent event) {
+    synchronized (eventHistory) {
+      if (eventHistory.size() == historyCapacity) {
+        eventHistory.removeFirst();
+      }
+      eventHistory.addLast(new RecordedEvent(producerSeq, event));
+    }
   }
 
-  public List<Envelope> eventsSince(long eventSeq) {
-    return eventHistory.stream()
-        .filter(envelope -> envelope.eventSeq() != null && envelope.eventSeq() > eventSeq)
-        .toList();
+  public List<RecordedEvent> eventsSince(long fromSeq) {
+    synchronized (eventHistory) {
+      return eventHistory.stream().filter(e -> e.producerSeq() > fromSeq).toList();
+    }
+  }
+
+  public int eventHistorySize() {
+    synchronized (eventHistory) {
+      return eventHistory.size();
+    }
   }
 
   public List<Subscriber> subscribers() {

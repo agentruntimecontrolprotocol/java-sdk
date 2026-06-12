@@ -74,6 +74,15 @@ public final class ResultStream {
     if (chunk.chunkSeq() < nextExpected) {
       throw new DuplicateChunkException(chunk.chunkSeq());
     }
+    ResultChunkEvent existing = pending.get(chunk.chunkSeq());
+    if (existing != null) {
+      // §8.4: a duplicate of a still-pending chunk is rejected like any other duplicate. A
+      // byte-identical retransmission is tolerated (idempotent); a divergent copy is an error.
+      if (existing.equals(chunk)) {
+        return;
+      }
+      throw new DuplicateChunkException(chunk.chunkSeq());
+    }
     pending.put(chunk.chunkSeq(), chunk);
     while (pending.containsKey(nextExpected)) {
       ResultChunkEvent ready = pending.remove(nextExpected);

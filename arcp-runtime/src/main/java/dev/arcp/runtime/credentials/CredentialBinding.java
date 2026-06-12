@@ -81,6 +81,20 @@ public final class CredentialBinding {
     }
   }
 
+  /**
+   * Record then revoke a credential that was minted upstream but not attached to a job (e.g. surplus
+   * credentials returned during rotation), so its spend authority is tracked and released rather
+   * than dangling (§14, #98).
+   */
+  public void revokeMinted(IssuedCredential credential) {
+    store.record(
+        credential.wire().id(),
+        credential.providerHandle() != null
+            ? credential.providerHandle()
+            : credential.wire().id().value());
+    revoke(credential);
+  }
+
   private void revoke(IssuedCredential credential) {
     CredentialId id = credential.wire().id();
     for (int attempt = 1; attempt <= MAX_REVOKE_ATTEMPTS; attempt++) {

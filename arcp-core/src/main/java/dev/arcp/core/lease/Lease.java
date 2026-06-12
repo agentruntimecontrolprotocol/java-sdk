@@ -69,11 +69,19 @@ public final class Lease {
     return wire == null ? empty() : new Lease(wire);
   }
 
-  /** §9.4 subset check: every child pattern is covered by a parent pattern. */
+  /**
+   * §9.4 subset check: every child capability must be covered by the parent. For pattern namespaces
+   * a child pattern is covered when some parent pattern covers it; for {@code cost.budget} the
+   * comparison is numeric — every child currency must be present in the parent and its amount must
+   * not exceed the parent's amount (a child cannot grant more spend than the parent holds).
+   */
   public boolean contains(Lease child) {
     return child.capabilities.entrySet().stream()
         .allMatch(
             e -> {
+              if ("cost.budget".equals(e.getKey())) {
+                return budgetContains(child);
+              }
               List<String> parent = capabilities.get(e.getKey());
               return parent != null
                   && e.getValue().stream()
@@ -82,6 +90,18 @@ public final class Lease {
                               parent.stream()
                                   .anyMatch(parentPattern -> covers(parentPattern, childPattern)));
             });
+  }
+
+  private boolean budgetContains(Lease child) {
+    Map<String, BigDecimal> parentBudget = budget();
+    Map<String, BigDecimal> childBudget = child.budget();
+    for (Map.Entry<String, BigDecimal> entry : childBudget.entrySet()) {
+      BigDecimal parentAmount = parentBudget.get(entry.getKey());
+      if (parentAmount == null || entry.getValue().compareTo(parentAmount) > 0) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static boolean covers(String parentPattern, String childPattern) {

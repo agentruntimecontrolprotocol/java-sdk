@@ -46,4 +46,22 @@ class CredentialJsonRoundTripTest {
     assertThat(ArcpMapper.shared().readValue(json, Credential.class)).isEqualTo(credential);
     assertThat(credential.toString()).doesNotContain("secret-token");
   }
+
+  @Test
+  void unknownSchemeDecodesToUnknownInsteadOfThrowing() throws Exception {
+    // §9.8.1: an unrecognized extension scheme must not fail decode (#97).
+    String json =
+        """
+        {
+          "id": "cred_x",
+          "scheme": "signed_url",
+          "value": "https://signed.example.test/abc",
+          "endpoint": "https://api.example.test"
+        }
+        """;
+    Credential decoded = ArcpMapper.shared().readValue(json, Credential.class);
+    assertThat(decoded.scheme()).isEqualTo(CredentialScheme.UNKNOWN);
+    assertThat(CredentialScheme.BEARER.isBearer()).isTrue();
+    assertThat(CredentialScheme.UNKNOWN.isBearer()).isFalse();
+  }
 }

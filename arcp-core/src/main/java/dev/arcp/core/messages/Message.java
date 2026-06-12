@@ -8,6 +8,7 @@ public sealed interface Message
     permits SessionHello,
         SessionWelcome,
         SessionBye,
+        SessionClosed,
         SessionPing,
         SessionPong,
         SessionAck,
@@ -19,6 +20,7 @@ public sealed interface Message
         JobResult,
         JobError,
         JobCancel,
+        JobCancelled,
         JobSubscribe,
         JobSubscribed,
         JobUnsubscribe {
@@ -28,7 +30,10 @@ public sealed interface Message
   enum Type {
     SESSION_HELLO("session.hello"),
     SESSION_WELCOME("session.welcome"),
-    SESSION_BYE("session.bye"),
+    // §6.7: the canonical graceful-close request is `session.close`; `session.bye` is accepted as a
+    // deprecated alias on decode for one release (see #96).
+    SESSION_BYE("session.close"),
+    SESSION_CLOSED("session.closed"),
     SESSION_PING("session.ping"),
     SESSION_PONG("session.pong"),
     SESSION_ACK("session.ack"),
@@ -40,6 +45,7 @@ public sealed interface Message
     JOB_RESULT("job.result"),
     JOB_ERROR("job.error"),
     JOB_CANCEL("job.cancel"),
+    JOB_CANCELLED("job.cancelled"),
     JOB_SUBSCRIBE("job.subscribe"),
     JOB_SUBSCRIBED("job.subscribed"),
     JOB_UNSUBSCRIBE("job.unsubscribe");
@@ -61,6 +67,8 @@ public sealed interface Message
       for (Type t : values()) {
         m.put(t.wire, t);
       }
+      // §6.7 backward-compat alias: legacy `session.bye` decodes to the graceful-close type.
+      m.put("session.bye", SESSION_BYE);
       BY_WIRE = java.util.Collections.unmodifiableMap(m);
     }
 
