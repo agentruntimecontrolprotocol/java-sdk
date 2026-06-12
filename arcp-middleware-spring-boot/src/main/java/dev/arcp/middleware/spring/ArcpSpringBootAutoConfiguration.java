@@ -1,6 +1,7 @@
 package dev.arcp.middleware.spring;
 
 import dev.arcp.runtime.ArcpRuntime;
+import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -40,6 +41,13 @@ public class ArcpSpringBootAutoConfiguration implements WebSocketConfigurer {
         properties.getAllowedOrigins().isEmpty()
             ? new String[] {"*"}
             : properties.getAllowedOrigins().toArray(new String[0]);
-    registry.addHandler(arcpWebSocketHandler(), properties.getPath()).setAllowedOrigins(origins);
+    var registration =
+        registry.addHandler(arcpWebSocketHandler(), properties.getPath()).setAllowedOrigins(origins);
+    // §14: enforce the Host allowlist before the upgrade completes so a disallowed Host is rejected
+    // (403) rather than being a silently ignored security control (#99).
+    List<String> allowedHosts = properties.getAllowedHosts();
+    if (!allowedHosts.isEmpty()) {
+      registration.addInterceptors(new HostAllowlistHandshakeInterceptor(allowedHosts));
+    }
   }
 }

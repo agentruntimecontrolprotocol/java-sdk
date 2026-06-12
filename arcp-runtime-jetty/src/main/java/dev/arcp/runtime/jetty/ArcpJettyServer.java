@@ -1,10 +1,13 @@
 package dev.arcp.runtime.jetty;
 
 import dev.arcp.runtime.ArcpRuntime;
+import jakarta.servlet.DispatcherType;
 import jakarta.websocket.server.ServerEndpointConfig;
 import java.net.URI;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import org.eclipse.jetty.ee10.servlet.FilterHolder;
 import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.websocket.jakarta.server.config.JakartaWebSocketServletContainerInitializer;
 import org.eclipse.jetty.server.Server;
@@ -17,12 +20,14 @@ public final class ArcpJettyServer implements AutoCloseable {
   private final ArcpRuntime runtime;
   private final String path;
   private final int port;
+  private final List<String> allowedHosts;
   private final Server server;
 
   private ArcpJettyServer(Builder b) {
     this.runtime = Objects.requireNonNull(b.runtime, "runtime");
     this.path = b.path;
     this.port = b.port;
+    this.allowedHosts = b.allowedHosts;
     VirtualThreadPool pool = new VirtualThreadPool();
     this.server = new Server(pool);
     ServerConnector connector = new ServerConnector(server);
@@ -31,6 +36,15 @@ public final class ArcpJettyServer implements AutoCloseable {
 
     ServletContextHandler context = new ServletContextHandler("/");
     server.setHandler(context);
+
+    // §14: reject upgrades from a non-allowlisted Host with 403 before the WebSocket handshake, so
+    // allowedHosts is an enforced control rather than a silent no-op (#99).
+    if (!allowedHosts.isEmpty()) {
+      context.addFilter(
+          new FilterHolder(new HostAllowlistFilter(allowedHosts)),
+          "/*",
+          EnumSet.of(DispatcherType.REQUEST));
+    }
 
     JakartaWebSocketServletContainerInitializer.configure(
         context,

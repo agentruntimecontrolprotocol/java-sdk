@@ -44,11 +44,20 @@ public final class ArcpJakartaAdapter {
 
   /** Build the {@link ServerEndpointConfig} ready to hand to a container. */
   public ServerEndpointConfig serverEndpointConfig() {
+    // The Jakarta WebSocket API offers no veto in modifyHandshake: clearing response headers does
+    // not stop the server from completing the upgrade, so a client that ignores
+    // Sec-WebSocket-Accept would still reach the runtime. Instead, record the host decision per
+    // handshake and have the endpoint close the session before runtime.accept (#100). The handshake
+    // and endpoint construction run on the same container thread, so a ThreadLocal reliably carries
+    // the decision from modifyHandshake to getEndpointInstance.
+    ThreadLocal<Boolean> hostRejected = ThreadLocal.withInitial(() -> Boolean.FALSE);
     ServerEndpointConfig.Configurator configurator =
         new ServerEndpointConfig.Configurator() {
           @Override
           public <T> T getEndpointInstance(Class<T> endpointClass) {
-            return endpointClass.cast(new ArcpJakartaEndpoint());
+            boolean rejected = hostRejected.get();
+            hostRejected.remove();
+            return endpointClass.cast(new ArcpJakartaEndpoint(rejected));
           }
 
           @Override
@@ -63,13 +72,12 @@ public final class ArcpJakartaAdapter {
           public void modifyHandshake(
               ServerEndpointConfig sec, HandshakeRequest request, HandshakeResponse response) {
             if (allowedHosts.isEmpty()) {
+              hostRejected.set(Boolean.FALSE);
               return;
             }
             List<String> hosts = request.getHeaders().get("Host");
-            if (hosts == null || hosts.isEmpty() || !allowedHosts.contains(hosts.get(0))) {
-              // Signal handshake rejection by stripping accept fields.
-              response.getHeaders().clear();
-            }
+            boolean allowed = hosts != null && !hosts.isEmpty() && allowedHosts.contains(hosts.get(0));
+            hostRejected.set(!allowed);
           }
         };
     ServerEndpointConfig config =

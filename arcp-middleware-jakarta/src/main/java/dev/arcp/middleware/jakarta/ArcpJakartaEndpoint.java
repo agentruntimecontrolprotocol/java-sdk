@@ -24,9 +24,29 @@ public final class ArcpJakartaEndpoint extends Endpoint {
   public static final String RUNTIME_KEY = ArcpRuntime.class.getName();
 
   private final Map<String, JakartaWebSocketTransport> transports = new ConcurrentHashMap<>();
+  private final boolean hostRejected;
+
+  public ArcpJakartaEndpoint() {
+    this(false);
+  }
+
+  ArcpJakartaEndpoint(boolean hostRejected) {
+    this.hostRejected = hostRejected;
+  }
 
   @Override
   public void onOpen(Session session, EndpointConfig config) {
+    if (hostRejected) {
+      // §14: the Host was not on the allowlist; close before the runtime ever sees the session, so
+      // a client that ignores Sec-WebSocket-Accept validation cannot talk to the runtime (#100).
+      try {
+        session.close(
+            new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "host not allowed"));
+      } catch (java.io.IOException ignored) {
+        // best-effort close
+      }
+      return;
+    }
     ArcpRuntime runtime = (ArcpRuntime) config.getUserProperties().get(RUNTIME_KEY);
     if (runtime == null) {
       log.warn("ArcpRuntime missing from EndpointConfig user properties");

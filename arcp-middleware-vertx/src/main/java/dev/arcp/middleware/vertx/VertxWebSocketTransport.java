@@ -51,7 +51,16 @@ final class VertxWebSocketTransport implements Transport {
     writeLock.lock();
     try {
       String json = mapper.writeValueAsString(envelope);
-      socket.writeTextMessage(json);
+      // Vert.x writes are async: observe the result so a failed write (closed socket, broken pipe)
+      // is surfaced as a transport failure instead of being silently dropped, letting the runtime
+      // detect a dead session (#110).
+      socket
+          .writeTextMessage(json)
+          .onFailure(
+              cause -> {
+                failInbound(cause);
+                socket.close();
+              });
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     } finally {
