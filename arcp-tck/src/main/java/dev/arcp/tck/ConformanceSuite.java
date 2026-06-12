@@ -55,7 +55,7 @@ public final class ConformanceSuite {
   public static List<DynamicTest> dynamicTests(ProviderFactory factory) {
     return List.of(
         DynamicTest.dynamicTest(
-            "§5.1 envelope round-trip via session.welcome",
+            "§5 envelope round-trip via session.welcome",
             () -> runWith(factory, ConformanceSuite::handshakeReturnsWelcome)),
         DynamicTest.dynamicTest(
             "§6.2 capability intersection with feature subset",

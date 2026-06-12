@@ -11,7 +11,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
  *
  * <ul>
  *   <li>{@code USE_BIG_DECIMAL_FOR_FLOATS}: §9.6 budget arithmetic on {@code BigDecimal}.
- *   <li>{@code FAIL_ON_UNKNOWN_PROPERTIES=false}: §5.1 mandates ignoring unknown fields.
+ *   <li>{@code FAIL_ON_UNKNOWN_PROPERTIES=false}: §5 mandates ignoring unknown fields.
  *   <li>{@link JavaTimeModule}: {@link java.time.Instant} for §9.5 expires_at.
  *   <li>{@code WRITE_DATES_AS_TIMESTAMPS=false}: ISO-8601 on the wire.
  *   <li>{@code Include.NON_NULL}: omit null fields globally.

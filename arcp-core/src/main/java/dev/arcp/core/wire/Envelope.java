@@ -12,7 +12,7 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
- * ARCP wire envelope per spec §5.1.
+ * ARCP wire envelope per spec §5.
  *
  * <p>Required fields: {@code arcp}, {@code id}, {@code type}, {@code payload}. Conditional fields:
  * {@code session_id}, {@code trace_id}, {@code job_id}, {@code event_seq}. Unknown top-level fields

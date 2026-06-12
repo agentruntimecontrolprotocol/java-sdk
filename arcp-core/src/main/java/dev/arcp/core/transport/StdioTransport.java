@@ -22,8 +22,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * §4.2 stdio transport: newline-delimited JSON over a pair of byte streams. Each envelope is
- * written as one line (UTF-8, JSON, terminated by {@code \n}).
+ * §4 stdio transport: newline-delimited JSON over a pair of byte streams. Each envelope is written
+ * as one line (UTF-8, JSON, terminated by {@code \n}).
  *
  * <p>Use case: a parent process spawns a child agent and wires its {@code
  * process.getOutputStream()} → child stdin, child stdout → {@code process.getInputStream()}. Both
