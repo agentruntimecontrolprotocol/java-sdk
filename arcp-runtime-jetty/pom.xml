@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-runtime-jetty</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-runtime-jetty</name>
     <description>Embedded Jetty 12 WebSocket transport for ARCP runtimes.</description>
 

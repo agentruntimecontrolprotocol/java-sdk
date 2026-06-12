@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-middleware-vertx</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-middleware-vertx</name>
     <description>Vert.x 5 WebSocket adapter for ARCP runtimes.</description>
 

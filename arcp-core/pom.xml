@@ -11,6 +11,10 @@
     </parent>
 
     <artifactId>arcp-core</artifactId>
+
+    <properties>
+        <arcp.skip.coverage.check>false</arcp.skip.coverage.check>
+    </properties>
     <name>arcp-core</name>
     <description>ARCP core wire types, capabilities, and errors.</description>
 
