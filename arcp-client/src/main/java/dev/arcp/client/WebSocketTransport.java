@@ -127,8 +127,12 @@ public final class WebSocketTransport implements Transport {
       }
       throw new IllegalStateException("WebSocket connect failed: " + cause, cause);
     } catch (java.util.concurrent.TimeoutException e) {
+      // Abandon the in-flight handshake without waiting on it: close() blocks until the operation
+      // completes, and against a server that accepts but never finishes the upgrade the JDK client
+      // retries on EOF — close() would turn the configured timeout into an indefinite hang (#113).
+      stage.cancel(true);
       try {
-        httpClient.close();
+        httpClient.shutdownNow();
       } catch (RuntimeException ignored) {
         // best-effort
       }
