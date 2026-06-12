@@ -179,7 +179,8 @@ class SessionLoopAuditTest {
                 "gauge",
                 "1.0.0",
                 (input, ctx) -> {
-                  ctx.emit(new MetricEvent("cost.budget.remaining", new BigDecimal("4"), "usd", null));
+                  ctx.emit(
+                      new MetricEvent("cost.budget.remaining", new BigDecimal("4"), "usd", null));
                   ctx.emit(new MetricEvent("cost.budget.remaining", null, "usd", null));
                   ctx.authorize("fs.read", "/workspace/x");
                   return JobOutcome.Success.inline(input.payload());
@@ -192,7 +193,10 @@ class SessionLoopAuditTest {
           new JobSubmit(
               AgentRef.parse("gauge@1.0.0"),
               JsonNodeFactory.instance.objectNode(),
-              Lease.builder().allow("fs.read", "/workspace/**").allow("cost.budget", "usd:5").build(),
+              Lease.builder()
+                  .allow("fs.read", "/workspace/**")
+                  .allow("cost.budget", "usd:5")
+                  .build(),
               null,
               null,
               null));

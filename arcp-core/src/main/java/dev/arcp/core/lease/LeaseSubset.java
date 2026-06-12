@@ -8,10 +8,10 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * §9.4 / §10 delegation subset enforcement. A delegated (child) lease MUST be a strict subset of its
- * parent: every capability pattern covered by the parent, every {@code cost.budget} amount no
- * greater than the parent's remaining amount, every {@code model.use} pattern covered, and an {@code
- * expires_at} no later than the parent's. Violations are rejected with {@code
+ * §9.4 / §10 delegation subset enforcement. A delegated (child) lease MUST be a strict subset of
+ * its parent: every capability pattern covered by the parent, every {@code cost.budget} amount no
+ * greater than the parent's remaining amount, every {@code model.use} pattern covered, and an
+ * {@code expires_at} no later than the parent's. Violations are rejected with {@code
  * LEASE_SUBSET_VIOLATION}.
  *
  * <p>The numeric/temporal comparisons here intentionally do not reuse the glob {@code covers()}
@@ -51,7 +51,10 @@ public final class LeaseSubset {
       Lease childSlice = new Lease(Map.of(namespace, entry.getValue()));
       if (!parent.contains(childSlice)) {
         throw new LeaseSubsetViolationException(
-            "delegated patterns exceed parent for namespace " + namespace + ": " + entry.getValue());
+            "delegated patterns exceed parent for namespace "
+                + namespace
+                + ": "
+                + entry.getValue());
       }
     }
     validateExpiry(parentExpiresAt, childExpiresAt);

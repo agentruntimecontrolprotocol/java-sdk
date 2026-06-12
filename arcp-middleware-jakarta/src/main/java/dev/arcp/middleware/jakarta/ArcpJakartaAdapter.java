@@ -76,7 +76,8 @@ public final class ArcpJakartaAdapter {
               return;
             }
             List<String> hosts = request.getHeaders().get("Host");
-            boolean allowed = hosts != null && !hosts.isEmpty() && allowedHosts.contains(hosts.get(0));
+            boolean allowed =
+                hosts != null && !hosts.isEmpty() && allowedHosts.contains(hosts.get(0));
             hostRejected.set(!allowed);
           }
         };

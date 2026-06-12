@@ -16,8 +16,8 @@ import java.util.HexFormat;
  * {@link JobSubmit} fields (agent, input, lease_request, lease_constraints, max_runtime_sec).
  *
  * <p>The serialization is canonical — both {@link java.util.Map} entries and {@code ObjectNode}
- * properties are sorted — so two payloads that differ only in JSON object key order hash identically
- * (#91).
+ * properties are sorted — so two payloads that differ only in JSON object key order hash
+ * identically (#91).
  */
 public final class IdempotencyFingerprint {
 

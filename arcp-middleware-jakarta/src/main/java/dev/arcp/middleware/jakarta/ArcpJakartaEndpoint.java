@@ -40,8 +40,7 @@ public final class ArcpJakartaEndpoint extends Endpoint {
       // §14: the Host was not on the allowlist; close before the runtime ever sees the session, so
       // a client that ignores Sec-WebSocket-Accept validation cannot talk to the runtime (#100).
       try {
-        session.close(
-            new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "host not allowed"));
+        session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "host not allowed"));
       } catch (java.io.IOException ignored) {
         // best-effort close
       }

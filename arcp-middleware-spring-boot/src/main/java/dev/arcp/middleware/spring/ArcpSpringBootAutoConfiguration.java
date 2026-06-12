@@ -42,7 +42,9 @@ public class ArcpSpringBootAutoConfiguration implements WebSocketConfigurer {
             ? new String[] {"*"}
             : properties.getAllowedOrigins().toArray(new String[0]);
     var registration =
-        registry.addHandler(arcpWebSocketHandler(), properties.getPath()).setAllowedOrigins(origins);
+        registry
+            .addHandler(arcpWebSocketHandler(), properties.getPath())
+            .setAllowedOrigins(origins);
     // §14: enforce the Host allowlist before the upgrade completes so a disallowed Host is rejected
     // (403) rather than being a silently ignored security control (#99).
     List<String> allowedHosts = properties.getAllowedHosts();

@@ -13,7 +13,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * §6.6 {@code session.list_jobs} filtering and paging. Filters a job registry by principal and the
  * requested {@link JobFilter}, orders by a stable key (createdAt, then jobId), and slices the
- * requested page — mapping only the page to {@link JobSummary} rather than every matching job (#83).
+ * requested page — mapping only the page to {@link JobSummary} rather than every matching job
+ * (#83).
  */
 public final class JobListing {
 

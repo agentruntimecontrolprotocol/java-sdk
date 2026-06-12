@@ -218,8 +218,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       parkExpiry =
           runtime
               .scheduler()
-              .schedule(
-                  () -> expirePark(token), runtime.resumeWindowSec(), TimeUnit.SECONDS);
+              .schedule(() -> expirePark(token), runtime.resumeWindowSec(), TimeUnit.SECONDS);
     } catch (java.util.concurrent.RejectedExecutionException e) {
       expirePark(token);
     }
@@ -413,7 +412,9 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     }
   }
 
-  /** §6.3: reattach this parked session to {@code incoming}'s transport and replay missed events. */
+  /**
+   * §6.3: reattach this parked session to {@code incoming}'s transport and replay missed events.
+   */
   private void resumeOnto(SessionLoop incoming, @Nullable Long lastEventSeq) {
     ScheduledFuture<?> pe = parkExpiry;
     if (pe != null) {
@@ -748,8 +749,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       if (w != null) {
         w.cancel(true);
       }
-      emitJobError(
-          record, JobError.TIMED_OUT, ErrorCode.TIMEOUT, "job exceeded max_runtime_sec");
+      emitJobError(record, JobError.TIMED_OUT, ErrorCode.TIMEOUT, "job exceeded max_runtime_sec");
       credentialBinding.revokeAll(record);
     }
   }
@@ -890,7 +890,8 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
         credentialBinding.revokeAll(record);
       }
     } catch (dev.arcp.core.error.LeaseExpiredException e) {
-      // §7.3: only emit a terminal error if this thread wins the transition; otherwise a watchdog or
+      // §7.3: only emit a terminal error if this thread wins the transition; otherwise a watchdog
+      // or
       // cancel already produced the single terminal message (#92).
       if (record.transitionTo(JobRecord.Status.ERROR)) {
         emitJobError(record, JobError.ERROR, ErrorCode.LEASE_EXPIRED, e.getMessage());
@@ -1033,7 +1034,8 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
     if (wantHistory) {
       // §8.1/§8.3/§14: re-envelope each replayed event with this (subscriber) session's session_id
-      // and a freshly allocated event_seq, and never echo credential material to a subscriber (#94).
+      // and a freshly allocated event_seq, and never echo credential material to a subscriber
+      // (#94).
       boolean isOwner = ownedJobs.contains(rec.jobId());
       for (JobRecord.RecordedEvent replay : rec.eventsSince(subscribedFrom)) {
         JobEvent event = replay.event();

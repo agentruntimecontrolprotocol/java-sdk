@@ -100,7 +100,8 @@ class SessionResumeTest {
       runtime.accept(pair2.runtime());
       sendHello(pair2.client(), resumeToken, lastSeq);
 
-      SessionWelcome resumed = probe2.takeMessage(Message.Type.SESSION_WELCOME, SessionWelcome.class);
+      SessionWelcome resumed =
+          probe2.takeMessage(Message.Type.SESSION_WELCOME, SessionWelcome.class);
       assertThat(resumed.resumeToken()).isEqualTo(resumeToken);
 
       // Replay: the missed event (e2) is delivered on the new transport.

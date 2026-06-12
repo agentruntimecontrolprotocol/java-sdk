@@ -82,9 +82,9 @@ public final class CredentialBinding {
   }
 
   /**
-   * Record then revoke a credential that was minted upstream but not attached to a job (e.g. surplus
-   * credentials returned during rotation), so its spend authority is tracked and released rather
-   * than dangling (§14, #98).
+   * Record then revoke a credential that was minted upstream but not attached to a job (e.g.
+   * surplus credentials returned during rotation), so its spend authority is tracked and released
+   * rather than dangling (§14, #98).
    */
   public void revokeMinted(IssuedCredential credential) {
     store.record(

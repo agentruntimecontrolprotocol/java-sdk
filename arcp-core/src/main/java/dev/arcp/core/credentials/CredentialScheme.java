@@ -10,9 +10,9 @@ public enum CredentialScheme {
   /**
    * §9.8.1: implementations MAY define extension schemes (e.g. {@code basic}, {@code signed_url});
    * unknown schemes MUST be ignored by clients that do not recognize them. Decoding an unrecognized
-   * scheme yields {@code UNKNOWN} rather than throwing, so a single extension credential cannot fail
-   * decode of an entire {@code job.accepted} (see #97). Consumers filter credentials whose scheme is
-   * {@code UNKNOWN}.
+   * scheme yields {@code UNKNOWN} rather than throwing, so a single extension credential cannot
+   * fail decode of an entire {@code job.accepted} (see #97). Consumers filter credentials whose
+   * scheme is {@code UNKNOWN}.
    */
   UNKNOWN("unknown");
 
