@@ -101,7 +101,7 @@
         <spring-boot.version>3.4.1</spring-boot.version>
         <spring.version>6.2.1</spring.version>
         <jakarta-websocket.version>2.2.0</jakarta-websocket.version>
-        <vertx.version>5.0.0</vertx.version>
+        <vertx.version>5.0.12</vertx.version>
 
         <!-- Plugin versions. -->
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
