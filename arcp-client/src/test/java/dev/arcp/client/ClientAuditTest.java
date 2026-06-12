@@ -177,4 +177,29 @@ class ClientAuditTest {
     }
     runtime.close();
   }
+
+  @Test
+  void connectWithInvalidResumeTokenFailsFast() throws Exception {
+    ArcpRuntime runtime =
+        ArcpRuntime.builder()
+            .agent("echo", "1.0.0", (input, ctx) -> JobOutcome.Success.inline(input.payload()))
+            .build();
+    MemoryTransport.Pair pair = MemoryTransport.pair();
+    runtime.accept(pair.runtime());
+    try (ArcpClient client =
+        ArcpClient.builder(pair.client())
+            .bearer("resume-principal")
+            .resumeToken("tok_unknown")
+            .lastEventSeq(0L)
+            .build()) {
+      // §6.3: an unknown/expired resume token rejects the handshake with RESUME_WINDOW_EXPIRED.
+      // connect() surfaces the top-level error instead of timing out, so the caller can fall back
+      // to a fresh session.
+      assertThatThrownBy(() -> client.connect(Duration.ofSeconds(5)))
+          .isInstanceOfSatisfying(
+              ArcpException.class,
+              e -> assertThat(e.code()).isEqualTo(ErrorCode.RESUME_WINDOW_EXPIRED));
+    }
+    runtime.close();
+  }
 }

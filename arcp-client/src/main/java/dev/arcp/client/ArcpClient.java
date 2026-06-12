@@ -178,9 +178,9 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
    * Blocking submit. Returns once the runtime acknowledges with {@code job.accepted} (or fails on
    * rejection). Bounded by the configured submit timeout so it can never block forever (#106).
    *
-   * <p>Must not be called from a dispatch/result callback (i.e. the transport inbound thread); doing
-   * so would deadlock because the acknowledgement is delivered by that same thread. Such a call
-   * fails fast with {@link IllegalStateException}.
+   * <p>Must not be called from a dispatch/result callback (i.e. the transport inbound thread);
+   * doing so would deadlock because the acknowledgement is delivered by that same thread. Such a
+   * call fails fast with {@link IllegalStateException}.
    */
   public JobHandle submit(JobSubmit submit, @Nullable TraceId traceId) {
     if (Boolean.TRUE.equals(inDispatch.get())) {
@@ -626,6 +626,12 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     PendingSubmit match = removePendingSubmit(correlationId);
     if (match != null) {
       match.outstanding().handleFuture.completeExceptionally(ex);
+      return;
+    }
+    // A top-level error before session.welcome rejects the handshake itself (e.g.
+    // RESUME_WINDOW_EXPIRED for an unknown/expired resume token, §6.3); fail connect() so the
+    // caller can fall back to a fresh session instead of timing out.
+    if (sessionFuture.completeExceptionally(ex)) {
       return;
     }
     log.warn("dropping uncorrelated top-level error {}: {}", err.code(), err.message());
