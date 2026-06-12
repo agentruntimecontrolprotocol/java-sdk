@@ -20,6 +20,7 @@ public final class Messages {
       case SESSION_HELLO -> mapper.convertValue(payload, SessionHello.class);
       case SESSION_WELCOME -> mapper.convertValue(payload, SessionWelcome.class);
       case SESSION_BYE -> mapper.convertValue(payload, SessionBye.class);
+      case SESSION_CLOSED -> mapper.convertValue(payload, SessionClosed.class);
       case SESSION_PING -> mapper.convertValue(payload, SessionPing.class);
       case SESSION_PONG -> mapper.convertValue(payload, SessionPong.class);
       case SESSION_ACK -> mapper.convertValue(payload, SessionAck.class);
@@ -31,6 +32,7 @@ public final class Messages {
       case JOB_RESULT -> mapper.convertValue(payload, JobResult.class);
       case JOB_ERROR -> mapper.convertValue(payload, JobError.class);
       case JOB_CANCEL -> mapper.convertValue(payload, JobCancel.class);
+      case JOB_CANCELLED -> mapper.convertValue(payload, JobCancelled.class);
       case JOB_SUBSCRIBE -> mapper.convertValue(payload, JobSubscribe.class);
       case JOB_SUBSCRIBED -> mapper.convertValue(payload, JobSubscribed.class);
       case JOB_UNSUBSCRIBE -> mapper.convertValue(payload, JobUnsubscribe.class);

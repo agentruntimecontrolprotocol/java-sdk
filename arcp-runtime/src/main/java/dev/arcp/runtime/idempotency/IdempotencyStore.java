@@ -91,6 +91,28 @@ public final class IdempotencyStore implements AutoCloseable {
   }
 
   /**
+   * Release a previously-claimed key, but only if it still maps to {@code expected}. Used to undo a
+   * claim when the corresponding accept fails (§7.2): without this the key stays poisoned for the
+   * full TTL and an identical retry is wrongly rejected with {@code DUPLICATE_KEY} (#90).
+   *
+   * @return {@code true} if an entry for {@code expected} was removed
+   */
+  public boolean release(Principal principal, String idempotencyKey, JobId expected) {
+    Key key = new Key(principal.id(), idempotencyKey);
+    Entry[] removed = new Entry[1];
+    entries.computeIfPresent(
+        key,
+        (k, entry) -> {
+          if (entry.jobId.equals(expected)) {
+            removed[0] = entry;
+            return null;
+          }
+          return entry;
+        });
+    return removed[0] != null;
+  }
+
+  /**
    * Evict entries older than {@code ttl}. Exposed for deterministic test control; the scheduled
    * background task invokes this method automatically when a scheduler was supplied at construction
    * time.

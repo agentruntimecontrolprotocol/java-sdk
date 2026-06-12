@@ -58,6 +58,19 @@ class ResultStreamTest {
   }
 
   @Test
+  void duplicatePendingChunkRejectedAndIdenticalTolerated() throws Exception {
+    ResultId id = ResultId.of("res_pending");
+    ResultStream stream = ResultStream.toMemory(id);
+    // chunk 1 arrives before its predecessor (still pending).
+    stream.accept(new ResultChunkEvent(id, 1, "world", "utf8", false));
+    // identical retransmission of a still-pending chunk is tolerated (#111).
+    stream.accept(new ResultChunkEvent(id, 1, "world", "utf8", false));
+    // a divergent copy of a still-pending chunk is rejected (#111).
+    assertThatThrownBy(() -> stream.accept(new ResultChunkEvent(id, 1, "WORLD", "utf8", false)))
+        .isInstanceOf(ResultStream.DuplicateChunkException.class);
+  }
+
+  @Test
   void rejectsWrongResultIdAndEncodingSwitches() throws Exception {
     ResultStream stream = ResultStream.toMemory(ResultId.of("res_expected"));
     assertThatThrownBy(

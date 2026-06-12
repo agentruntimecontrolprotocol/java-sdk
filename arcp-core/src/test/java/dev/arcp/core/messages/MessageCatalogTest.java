@@ -78,6 +78,7 @@ class MessageCatalogTest {
                     EnumSet.of(Feature.SUBSCRIBE, Feature.LIST_JOBS),
                     List.of(new AgentDescriptor("echo", List.of("1.0.0", "2.0.0"), "2.0.0")))),
             new SessionBye("done"),
+            new SessionClosed("done"),
             new SessionPing("nonce-1", NOW),
             new SessionPong("nonce-1", NOW.plusMillis(5)),
             new SessionAck(42L),
@@ -125,6 +126,7 @@ class MessageCatalogTest {
                 null,
                 JsonNodeFactory.instance.objectNode().put("path", "/etc/passwd")),
             new JobCancel("user requested"),
+            new JobCancelled("user requested"),
             new JobSubscribe(JOB_ID, 3L, true),
             new JobSubscribed(JOB_ID, "running", "echo@1.0.0", LEASE, null, TRACE_ID, 3L, true),
             new JobUnsubscribe(JOB_ID));

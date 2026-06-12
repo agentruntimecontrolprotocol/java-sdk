@@ -3,7 +3,6 @@ package dev.arcp.recipes.streamresume;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import dev.arcp.client.ArcpClient;
 import dev.arcp.client.JobHandle;
-import dev.arcp.client.Session;
 import dev.arcp.client.SubscribeOptions;
 import dev.arcp.core.events.EventBody;
 import dev.arcp.core.events.StatusEvent;
@@ -11,6 +10,7 @@ import dev.arcp.core.ids.JobId;
 import dev.arcp.core.transport.MemoryTransport;
 import dev.arcp.runtime.ArcpRuntime;
 import dev.arcp.runtime.agent.JobOutcome;
+import dev.arcp.runtime.session.SessionLoop;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Flow;
@@ -21,8 +21,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Recipe: Stream resume across connections.
  *
  * <p>Client 1 submits a streaming job (emits 10 {@link StatusEvent}s) and awaits completion,
- * recording the resume token and last-seen sequence. Client 2 reconnects using those values and
- * re-subscribes to replay the event history, demonstrating fault-tolerant stream consumption.
+ * recording the resume token and last-seen sequence. Its transport then drops unexpectedly (no
+ * {@code session.close}), so the runtime parks the session for the resume window (§6.3). Client 2
+ * reconnects with the recorded token and re-subscribes with history to replay the event stream,
+ * demonstrating fault-tolerant stream consumption. Both connections authenticate with the same
+ * bearer token: resume requires a stable principal.
  */
 public final class Main {
   public static void main(String[] args) throws Exception {
@@ -41,15 +44,16 @@ public final class Main {
 
     // --- Client 1: live consumption. ---
     MemoryTransport.Pair pair1 = MemoryTransport.pair();
-    runtime.accept(pair1.runtime());
+    SessionLoop serverSession = runtime.accept(pair1.runtime());
 
-    String resumeToken = null;
-    long lastSeq = 0L;
+    String resumeToken;
+    long lastSeq;
     JobId jobId;
     AtomicInteger firstPassCount = new AtomicInteger();
     CompletableFuture<Void> firstPassDone = new CompletableFuture<>();
 
-    try (ArcpClient client1 = ArcpClient.builder(pair1.client()).bearer("demo").build()) {
+    ArcpClient client1 = ArcpClient.builder(pair1.client()).bearer("demo").build();
+    try {
       client1.connect(Duration.ofSeconds(5));
 
       JobHandle handle =
@@ -87,26 +91,38 @@ public final class Main {
       firstPassDone.get(5, TimeUnit.SECONDS);
       jobId = handle.jobId();
 
-      Session session = client1.session();
-      resumeToken = session.resumeToken();
+      resumeToken = client1.session().resumeToken();
       lastSeq = client1.lastSeenSeq();
+
+      // Simulate an unexpected transport drop: no session.close is sent, so the runtime parks the
+      // session for the resume window instead of cancelling it.
+      pair1.runtime().close();
+    } finally {
+      client1.close();
+    }
+
+    // The in-memory transport delivers the drop asynchronously; wait until the runtime has parked
+    // the session. Over a real network the reconnect delay dwarfs this detection time.
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (serverSession.phase() != SessionLoop.Phase.PARKED && System.nanoTime() < deadline) {
+      Thread.sleep(10);
     }
 
     int firstCount = firstPassCount.get();
 
-    // --- Client 2: replay via history subscription. ---
+    // --- Client 2: resume the parked session and replay via history subscription. ---
     MemoryTransport.Pair pair2 = MemoryTransport.pair();
     runtime.accept(pair2.runtime());
 
     AtomicInteger replayCount = new AtomicInteger();
     CompletableFuture<Void> replayDone = new CompletableFuture<>();
 
-    ArcpClient.Builder builder2 = ArcpClient.builder(pair2.client()).bearer("demo");
-    if (resumeToken != null) {
-      builder2 = builder2.resumeToken(resumeToken).lastEventSeq(lastSeq);
-    }
-
-    try (ArcpClient client2 = builder2.build()) {
+    try (ArcpClient client2 =
+        ArcpClient.builder(pair2.client())
+            .bearer("demo")
+            .resumeToken(resumeToken)
+            .lastEventSeq(lastSeq)
+            .build()) {
       client2.connect(Duration.ofSeconds(5));
 
       Flow.Publisher<EventBody> replayEvents =

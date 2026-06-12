@@ -7,6 +7,8 @@ import dev.arcp.core.agents.AgentRef;
 import dev.arcp.core.auth.Auth;
 import dev.arcp.core.capabilities.Capabilities;
 import dev.arcp.core.capabilities.Feature;
+import dev.arcp.core.credentials.Credential;
+import dev.arcp.core.credentials.CredentialScheme;
 import dev.arcp.core.error.ArcpException;
 import dev.arcp.core.error.ErrorPayload;
 import dev.arcp.core.events.EventBody;
@@ -20,6 +22,7 @@ import dev.arcp.core.lease.LeaseConstraints;
 import dev.arcp.core.messages.ClientInfo;
 import dev.arcp.core.messages.JobAccepted;
 import dev.arcp.core.messages.JobCancel;
+import dev.arcp.core.messages.JobCancelled;
 import dev.arcp.core.messages.JobError;
 import dev.arcp.core.messages.JobEvent;
 import dev.arcp.core.messages.JobFilter;
@@ -33,6 +36,7 @@ import dev.arcp.core.messages.Message;
 import dev.arcp.core.messages.Messages;
 import dev.arcp.core.messages.SessionAck;
 import dev.arcp.core.messages.SessionBye;
+import dev.arcp.core.messages.SessionClosed;
 import dev.arcp.core.messages.SessionHello;
 import dev.arcp.core.messages.SessionJobs;
 import dev.arcp.core.messages.SessionListJobs;
@@ -90,6 +94,10 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
   private final ScheduledExecutorService scheduler;
   private final boolean autoAck;
   private final Duration ackInterval;
+  private final Duration submitTimeout;
+  // Set while the transport's inbound delivery thread is inside dispatch(); used to fail fast if a
+  // user completes a future on this thread and then calls blocking submit (#106).
+  private final ThreadLocal<Boolean> inDispatch = ThreadLocal.withInitial(() -> Boolean.FALSE);
   private final AtomicLong lastSeenSeq = new AtomicLong(-1);
   private final AtomicLong lastAckedSeq = new AtomicLong(-1);
   private final AtomicLong lastInboundMillis = new AtomicLong(System.currentTimeMillis());
@@ -121,6 +129,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     this.requestedFeatures = safeFeatureCopy(b.features);
     this.autoAck = b.autoAck;
     this.ackInterval = b.ackInterval;
+    this.submitTimeout = b.submitTimeout;
     if (b.scheduler != null) {
       this.scheduler = b.scheduler;
       this.ownedScheduler = false;
@@ -165,7 +174,45 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     return submit(submit, null);
   }
 
+  /**
+   * Blocking submit. Returns once the runtime acknowledges with {@code job.accepted} (or fails on
+   * rejection). Bounded by the configured submit timeout so it can never block forever (#106).
+   *
+   * <p>Must not be called from a dispatch/result callback (i.e. the transport inbound thread);
+   * doing so would deadlock because the acknowledgement is delivered by that same thread. Such a
+   * call fails fast with {@link IllegalStateException}.
+   */
   public JobHandle submit(JobSubmit submit, @Nullable TraceId traceId) {
+    if (Boolean.TRUE.equals(inDispatch.get())) {
+      throw new IllegalStateException(
+          "submit() must not be called from an event/result callback; use submitAsync()");
+    }
+    CompletableFuture<JobHandle> future = submitAsync(submit, traceId);
+    try {
+      return future.get(submitTimeout.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      pendingSubmits.removeIf(p -> p.outstanding().handleFuture == future);
+      future.completeExceptionally(e);
+      throw new IllegalStateException(
+          "submit timed out after " + submitTimeout + " awaiting job.accepted", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("submit interrupted", e);
+    } catch (java.util.concurrent.ExecutionException e) {
+      // Preserve the prior join() behavior: surface the cause (e.g. an ArcpException such as
+      // DuplicateKeyException) wrapped in an unchecked CompletionException so callers can inspect
+      // getCause().
+      Throwable cause = e.getCause() != null ? e.getCause() : e;
+      throw new java.util.concurrent.CompletionException(cause);
+    }
+  }
+
+  /** Non-blocking submit. Completes with the {@link JobHandle} on {@code job.accepted} (#106). */
+  public CompletableFuture<JobHandle> submitAsync(JobSubmit submit) {
+    return submitAsync(submit, null);
+  }
+
+  public CompletableFuture<JobHandle> submitAsync(JobSubmit submit, @Nullable TraceId traceId) {
     Outstanding o = new Outstanding();
     MessageId requestId = MessageId.generate();
     // The put-then-send pair must be atomic w.r.t. other submits so that the
@@ -180,7 +227,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     } finally {
       submitLock.unlock();
     }
-    return o.handleFuture.join();
+    return o.handleFuture;
   }
 
   public Page<JobSummary> listJobs(@Nullable JobFilter filter)
@@ -330,10 +377,13 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     if (seq != null) {
       lastSeenSeq.updateAndGet(prev -> Math.max(prev, seq));
     }
+    inDispatch.set(Boolean.TRUE);
     try {
       dispatch(envelope);
     } catch (RuntimeException e) {
       log.warn("client dispatch error for {}: {}", envelope.type(), e.toString());
+    } finally {
+      inDispatch.set(Boolean.FALSE);
     }
   }
 
@@ -403,6 +453,8 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
       case JobSubscribed ignored -> {
         /* signal */
       }
+      case JobCancelled cancelled -> handleCancelled(envelope, cancelled);
+      case SessionClosed ignored -> log.debug("session closed acknowledged by runtime");
       case SessionJobs jobs -> handleListResponse(jobs);
       case SessionPing ping -> handlePing(ping);
       case SessionPong ignored -> log.debug("client ignored: {}", envelope.type());
@@ -481,10 +533,40 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     if (head == null) {
       return;
     }
+    // §9.8.1: drop credentials whose scheme this client does not recognize rather than failing the
+    // whole acceptance (#97). Unknown schemes decode to CredentialScheme.UNKNOWN.
+    JobAccepted visible = withRecognizedCredentials(accepted);
     Outstanding o = head.outstanding();
-    o.jobId = accepted.jobId();
-    outstanding.put(accepted.jobId(), o);
-    o.handleFuture.complete(new ClientJobHandle(accepted, o));
+    o.jobId = visible.jobId();
+    outstanding.put(visible.jobId(), o);
+    o.handleFuture.complete(new ClientJobHandle(visible, o));
+  }
+
+  private static JobAccepted withRecognizedCredentials(JobAccepted accepted) {
+    List<Credential> credentials = accepted.credentials();
+    if (credentials == null || credentials.isEmpty()) {
+      return accepted;
+    }
+    List<Credential> recognized =
+        credentials.stream().filter(c -> c.scheme() != CredentialScheme.UNKNOWN).toList();
+    if (recognized.size() == credentials.size()) {
+      return accepted;
+    }
+    return new JobAccepted(
+        accepted.jobId(),
+        accepted.agent(),
+        accepted.lease(),
+        accepted.leaseConstraints(),
+        accepted.budget(),
+        recognized.isEmpty() ? null : recognized,
+        accepted.acceptedAt(),
+        accepted.traceId());
+  }
+
+  private void handleCancelled(Envelope envelope, JobCancelled cancelled) {
+    // §7.4 ack: the terminal job.error CANCELLED that follows completes the result/subscriber; the
+    // ack itself is informational.
+    log.debug("job {} cancellation acknowledged: {}", envelope.jobId(), cancelled.reason());
   }
 
   private void handleJobEvent(Envelope envelope, JobEvent event) {
@@ -509,28 +591,76 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
       return;
     }
     Outstanding o = outstanding.remove(jid);
-    if (o == null) {
-      return;
+    if (o != null) {
+      o.events.close();
+      o.resultFuture.complete(result);
     }
-    o.events.close();
-    o.resultFuture.complete(result);
+    // Complete the live subscriber publisher (if any) so "subscribe and iterate until complete"
+    // consumers see onComplete instead of blocking forever, and per-job executors are released
+    // (#105).
+    completeLiveSubscriber(jid, null);
   }
 
   private void handleError(Envelope envelope, JobError err) {
     JobId jid = envelope.jobId();
-    Outstanding o = jid != null ? outstanding.remove(jid) : null;
-    if (o == null) {
-      // Top-level (unassigned) error: fail the oldest pending submit.
-      PendingSubmit head = pendingSubmits.pollFirst();
-      if (head != null) {
-        ArcpException ex = ArcpException.from(ErrorPayload.of(err.code(), err.message()));
-        head.outstanding().handleFuture.completeExceptionally(ex);
+    ArcpException ex = ArcpException.from(ErrorPayload.of(err.code(), err.message()));
+    if (jid != null) {
+      // Terminal error for a known job: fail its result and complete its subscriber. A jobful error
+      // is never treated as a submit rejection (#102).
+      Outstanding o = outstanding.remove(jid);
+      if (o != null) {
+        o.events.close();
+        o.resultFuture.completeExceptionally(ex);
       }
+      completeLiveSubscriber(jid, ex);
       return;
     }
-    o.events.close();
-    ArcpException ex = ArcpException.from(ErrorPayload.of(err.code(), err.message()));
-    o.resultFuture.completeExceptionally(ex);
+    // Top-level (jobless) error: correlate to the originating request via the echoed envelope id so
+    // a list_jobs/subscribe error never fails an unrelated in-flight submit (#102).
+    MessageId correlationId = envelope.id();
+    CompletableFuture<SessionJobs> listFuture = listRequests.remove(correlationId);
+    if (listFuture != null) {
+      listFuture.completeExceptionally(ex);
+      return;
+    }
+    PendingSubmit match = removePendingSubmit(correlationId);
+    if (match != null) {
+      match.outstanding().handleFuture.completeExceptionally(ex);
+      return;
+    }
+    // A top-level error before session.welcome rejects the handshake itself (e.g.
+    // RESUME_WINDOW_EXPIRED for an unknown/expired resume token, §6.3); fail connect() so the
+    // caller can fall back to a fresh session instead of timing out.
+    if (sessionFuture.completeExceptionally(ex)) {
+      return;
+    }
+    log.warn("dropping uncorrelated top-level error {}: {}", err.code(), err.message());
+  }
+
+  private @Nullable PendingSubmit removePendingSubmit(MessageId requestId) {
+    for (java.util.Iterator<PendingSubmit> it = pendingSubmits.iterator(); it.hasNext(); ) {
+      PendingSubmit p = it.next();
+      if (p.requestId().equals(requestId)) {
+        it.remove();
+        return p;
+      }
+    }
+    return null;
+  }
+
+  private void completeLiveSubscriber(JobId jid, @Nullable Throwable error) {
+    SubmissionPublisher<EventBody> pub = liveSubscribers.remove(jid);
+    if (pub != null) {
+      if (error != null) {
+        pub.closeExceptionally(error);
+      } else {
+        pub.close();
+      }
+    }
+    ExecutorService exec = liveExecutors.remove(jid);
+    if (exec != null) {
+      exec.shutdown();
+    }
   }
 
   private void handleListResponse(SessionJobs jobs) {
@@ -629,6 +759,7 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
     private Set<Feature> features = EnumSet.allOf(Feature.class);
     private boolean autoAck = true;
     private Duration ackInterval = Duration.ofMillis(200);
+    private Duration submitTimeout = Duration.ofSeconds(30);
     private @Nullable ScheduledExecutorService scheduler;
     private @Nullable String resumeToken;
     private @Nullable Long lastEventSeq;
@@ -669,6 +800,12 @@ public final class ArcpClient implements AutoCloseable, Flow.Subscriber<Envelope
 
     public Builder ackInterval(Duration interval) {
       this.ackInterval = interval;
+      return this;
+    }
+
+    /** Maximum time blocking {@link #submit(JobSubmit)} waits for {@code job.accepted} (#106). */
+    public Builder submitTimeout(Duration timeout) {
+      this.submitTimeout = timeout;
       return this;
     }
 

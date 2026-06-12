@@ -52,6 +52,9 @@ public final class ArcpRuntime implements AutoCloseable {
   private final CredentialRevocationStore credentialRevocationStore;
   private final ConcurrentHashMap<String, SessionLoop> sessions = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<JobId, JobRecord> jobs = new ConcurrentHashMap<>();
+  // §6.3 resume: sessions whose transport dropped unexpectedly are parked here by resume token for
+  // the resume window so a reconnect can reattach to the same identity and in-flight jobs (#22).
+  private final ConcurrentHashMap<String, SessionLoop> resumable = new ConcurrentHashMap<>();
 
   private ArcpRuntime(Builder b) {
     this.mapper = b.mapper != null ? b.mapper : ArcpMapper.shared();
@@ -123,11 +126,17 @@ public final class ArcpRuntime implements AutoCloseable {
   /** Attach a transport; the returned handle is closed on session.bye or transport close. */
   public SessionLoop accept(Transport transport) {
     SessionLoop loop = new SessionLoop(this, transport);
-    loop.start();
+    // Insert before start() so that if the transport completes/errors synchronously during start
+    // (e.g. an already-closed transport), shutdown -> removeSession finds and removes this entry
+    // instead of racing a later put that would leave a zombie CLOSED loop in the map (#107).
     // Always key by the stable pending id, not idOrPending() — the latter flips to the
     // real session id after handshake and would leave the map keyed by a now-orphaned
     // string, so removeSession would never find the entry (#23).
     sessions.put(loop.pendingKey(), loop);
+    loop.start();
+    if (loop.phase() == SessionLoop.Phase.CLOSED) {
+      removeSession(loop);
+    }
     return loop;
   }
 
@@ -207,6 +216,21 @@ public final class ArcpRuntime implements AutoCloseable {
     return jobs.values();
   }
 
+  /** Park a session for resume, keyed by its resume token (§6.3, #22). */
+  public void parkResumable(String resumeToken, SessionLoop loop) {
+    resumable.put(resumeToken, loop);
+  }
+
+  /** Atomically claim a parked session for resume, or {@code null} if unknown/expired (#22). */
+  public @Nullable SessionLoop takeResumable(String resumeToken) {
+    return resumable.remove(resumeToken);
+  }
+
+  /** Remove a parked session only if it still maps to {@code loop} (#22). */
+  public void removeResumable(String resumeToken, SessionLoop loop) {
+    resumable.remove(resumeToken, loop);
+  }
+
   public void removeSession(SessionLoop loop) {
     // Always remove via the pending key the loop was inserted under, since
     // idOrPending() flips to the real session id after handshake and would
@@ -220,6 +244,10 @@ public final class ArcpRuntime implements AutoCloseable {
     for (SessionLoop loop : sessions.values()) {
       loop.shutdown("runtime closing");
     }
+    for (SessionLoop loop : resumable.values()) {
+      loop.shutdown("runtime closing");
+    }
+    resumable.clear();
     sessions.clear();
     idempotency.close();
     if (ownedScheduler) {
