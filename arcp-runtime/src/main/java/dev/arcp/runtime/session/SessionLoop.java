@@ -85,11 +85,14 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   public enum Phase {
     AWAITING_HELLO,
     ACTIVE,
+    PARKED,
     CLOSED
   }
 
   private final ArcpRuntime runtime;
-  private final Transport transport;
+  // Swappable so a resume can reattach the same session identity (and its in-flight jobs) to a new
+  // transport (§6.3, #22).
+  private volatile Transport transport;
   private final ObjectMapper mapper;
   private final AgentRegistry agents;
   private final String pendingId = "pending:" + UUID.randomUUID();
@@ -107,6 +110,14 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   private final HeartbeatTracker heartbeat;
   private final CredentialBinding credentialBinding;
   private volatile @Nullable ScheduledFuture<?> heartbeatTick;
+  private volatile @Nullable ScheduledFuture<?> parkExpiry;
+  // Set when the client requested an explicit graceful close (session.close) so an unexpected
+  // transport drop can be distinguished from intentional teardown (#22).
+  private volatile boolean explicitClose;
+  // When this loop is just a forwarder for a resumed session, inbound is delegated to the resumed
+  // (parked) loop instead of being dispatched here (#22).
+  private volatile @Nullable SessionLoop resumeDelegate;
+  private volatile @Nullable Duration heartbeatInterval;
 
   private final Set<JobId> ownedJobs = ConcurrentHashMap.newKeySet();
 
@@ -150,6 +161,13 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
   @Override
   public void onNext(Envelope envelope) {
+    SessionLoop delegate = resumeDelegate;
+    if (delegate != null) {
+      // This loop only carried the resume handshake; subsequent inbound belongs to the resumed
+      // session (#22).
+      delegate.onNext(envelope);
+      return;
+    }
     heartbeat.onInbound();
     try {
       handle(envelope);
@@ -160,22 +178,81 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
   @Override
   public void onError(Throwable throwable) {
-    shutdown("transport error: " + throwable.getMessage());
+    onTransportDropped("transport error: " + throwable.getMessage());
   }
 
   @Override
   public void onComplete() {
-    shutdown("transport closed");
+    onTransportDropped("transport closed");
+  }
+
+  private void onTransportDropped(String reason) {
+    SessionLoop delegate = resumeDelegate;
+    if (delegate != null) {
+      // The forwarder's transport dropped; let the resumed session decide whether to park.
+      delegate.onTransportDropped(reason);
+      return;
+    }
+    // §6.3: an unexpected transport drop (not an explicit session.close) parks the session for the
+    // resume window, keeping in-flight jobs alive, rather than cancelling everything (#22).
+    if (!explicitClose && resumeToken != null && phase.compareAndSet(Phase.ACTIVE, Phase.PARKED)) {
+      park(reason);
+      return;
+    }
+    shutdown(reason);
+  }
+
+  private void park(String reason) {
+    log.debug("session {} parked for resume: {}", sessionId, reason);
+    ScheduledFuture<?> hb = heartbeatTick;
+    if (hb != null) {
+      hb.cancel(false);
+    }
+    String token = resumeToken;
+    if (token == null) {
+      shutdown(reason);
+      return;
+    }
+    runtime.parkResumable(token, this);
+    try {
+      parkExpiry =
+          runtime
+              .scheduler()
+              .schedule(
+                  () -> expirePark(token), runtime.resumeWindowSec(), TimeUnit.SECONDS);
+    } catch (java.util.concurrent.RejectedExecutionException e) {
+      expirePark(token);
+    }
+  }
+
+  private void expirePark(String token) {
+    if (phase.compareAndSet(Phase.PARKED, Phase.CLOSED)) {
+      runtime.removeResumable(token, this);
+      teardownJobsAndSession();
+    }
   }
 
   public void shutdown(String reason) {
-    if (phase.getAndSet(Phase.CLOSED) == Phase.CLOSED) {
+    Phase prev = phase.getAndSet(Phase.CLOSED);
+    if (prev == Phase.CLOSED) {
       return;
     }
     ScheduledFuture<?> hb = heartbeatTick;
     if (hb != null) {
       hb.cancel(false);
     }
+    ScheduledFuture<?> pe = parkExpiry;
+    if (pe != null) {
+      pe.cancel(false);
+    }
+    if (resumeToken != null) {
+      runtime.removeResumable(resumeToken, this);
+    }
+    teardownJobsAndSession();
+  }
+
+  /** Cancel in-flight jobs, unlink subscribers, close the transport, and deregister (#22, #101). */
+  private void teardownJobsAndSession() {
     for (JobId jobId : ownedJobs) {
       JobRecord rec = runtime.job(jobId);
       if (rec == null) {
@@ -270,6 +347,24 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   private void doHandshake(SessionHello hello) {
     try {
       Principal pr = authenticate(hello);
+
+      // §6.3 resume: if the hello carries a resume token for a parked session owned by the same
+      // principal, reattach to it and replay missed events instead of starting fresh (#22).
+      String token = hello.resumeToken();
+      if (token != null) {
+        SessionLoop parked = runtime.takeResumable(token);
+        if (parked != null && parked.phase() == Phase.PARKED && pr.equals(parked.principal())) {
+          parked.resumeOnto(this, hello.lastEventSeq());
+          return;
+        }
+        if (parked != null) {
+          // token found but not resumable by this principal: put it back for the legitimate owner.
+          runtime.parkResumable(token, parked);
+        }
+        rejectResume();
+        return;
+      }
+
       this.principal = pr;
       this.sessionId = SessionId.generate();
       this.resumeToken = UUID.randomUUID().toString();
@@ -296,6 +391,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       // §6.4: schedule heartbeat ticks if both peers negotiated heartbeat.
       if (negotiated.contains(Feature.HEARTBEAT)) {
         Duration interval = Duration.ofSeconds(runtime.heartbeatIntervalSec());
+        this.heartbeatInterval = interval;
         heartbeat.onInbound();
         heartbeatTick =
             runtime
@@ -315,6 +411,62 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
       log.info("handshake rejected: {}", e.getMessage());
       shutdown("auth rejected");
     }
+  }
+
+  /** §6.3: reattach this parked session to {@code incoming}'s transport and replay missed events. */
+  private void resumeOnto(SessionLoop incoming, @Nullable Long lastEventSeq) {
+    ScheduledFuture<?> pe = parkExpiry;
+    if (pe != null) {
+      pe.cancel(false);
+    }
+    // Adopt the new connection's transport; route its inbound to this session; retire the
+    // forwarder loop as a standalone session.
+    this.transport = incoming.transport;
+    incoming.resumeDelegate = this;
+    runtime.removeSession(incoming);
+    this.phase.set(Phase.ACTIVE);
+
+    Capabilities welcomeCaps = new Capabilities(List.of("json"), negotiated, agents.describe());
+    SessionWelcome welcome =
+        new SessionWelcome(
+            new RuntimeInfo(runtime.runtimeName(), runtime.runtimeVersion()),
+            resumeToken,
+            runtime.resumeWindowSec(),
+            negotiated.contains(Feature.HEARTBEAT) ? runtime.heartbeatIntervalSec() : null,
+            welcomeCaps);
+    send(Message.Type.SESSION_WELCOME, welcome, sessionId, null, null, null);
+
+    // §6.3: replay buffered envelopes the client missed (event_seq > last_event_seq).
+    long from = lastEventSeq != null ? lastEventSeq : -1L;
+    for (Envelope replay : resumeBuffer.since(from)) {
+      try {
+        transport.send(replay);
+      } catch (RuntimeException e) {
+        log.warn("resume replay send failed: {}", e.toString());
+        break;
+      }
+    }
+
+    // Reschedule heartbeat on the new connection.
+    Duration interval = heartbeatInterval;
+    if (negotiated.contains(Feature.HEARTBEAT) && interval != null) {
+      heartbeat.onInbound();
+      heartbeatTick =
+          runtime
+              .scheduler()
+              .scheduleAtFixedRate(
+                  () -> tickHeartbeat(interval),
+                  interval.toMillis(),
+                  interval.toMillis(),
+                  TimeUnit.MILLISECONDS);
+    }
+    log.debug("session {} resumed", sessionId);
+  }
+
+  private void rejectResume() {
+    // §6.3: unknown or expired resume token. Surface RESUME_WINDOW_EXPIRED then tear down.
+    sendJobErrorTopLevel(null, ErrorCode.RESUME_WINDOW_EXPIRED, "resume token unknown or expired");
+    shutdown("resume rejected");
   }
 
   private Principal authenticate(SessionHello hello) throws ArcpException {
@@ -350,7 +502,9 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
   private void handleBye(SessionBye bye) {
     log.debug("session {} close: {}", sessionId, bye.reason());
-    // §6.7: acknowledge with session.closed before tearing down the transport.
+    // §6.7: an explicit graceful close cancels in-flight jobs (it is not a resumable drop, #22).
+    explicitClose = true;
+    // Acknowledge with session.closed before tearing down the transport.
     send(Message.Type.SESSION_CLOSED, new SessionClosed(bye.reason()), sessionId, null, null, null);
     shutdown("client close");
   }
@@ -1112,11 +1266,18 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     if (seq != null) {
       resumeBuffer.record(env);
     }
+    // §6.3: while parked the transport is gone; buffer sequenced messages for replay on resume and
+    // do not tear the session down (#22).
+    if (phase.get() == Phase.PARKED) {
+      return env;
+    }
     try {
       transport.send(env);
     } catch (RuntimeException e) {
       log.warn("send failed: {}", e.toString());
-      shutdown("send failure");
+      if (phase.get() == Phase.ACTIVE) {
+        shutdown("send failure");
+      }
     }
     return env;
   }
