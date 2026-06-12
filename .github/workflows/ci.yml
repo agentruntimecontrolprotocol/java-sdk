@@ -146,7 +146,11 @@ jobs:
           java-version: "21"
           cache: maven
       - name: Build javadoc for all published modules
+        # `package` before javadoc:javadoc so inter-module dependencies resolve
+        # from this reactor's output instead of a (possibly stale) cached
+        # SNAPSHOT in the runner's local repository — otherwise javadoc cannot
+        # see classes a PR adds to an upstream module like arcp-core.
         run: |
           mvn -B -ntp -am -DskipTests -Darcp.skip.spotless=true \
             -pl arcp-core,arcp-client,arcp-runtime,arcp,arcp-otel,arcp-runtime-jetty,arcp-middleware-jakarta,arcp-middleware-spring-boot,arcp-middleware-vertx,arcp-tck \
-            javadoc:javadoc
+            package javadoc:javadoc
