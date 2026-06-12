@@ -86,34 +86,34 @@
         <maven.compiler.release>21</maven.compiler.release>
 
         <!-- Library versions (kept in sync with the wire-protocol matrix in CONFORMANCE.md). -->
-        <jackson.version>2.18.2</jackson.version>
-        <slf4j.version>2.0.16</slf4j.version>
+        <jackson.version>2.22.0</jackson.version>
+        <slf4j.version>2.0.18</slf4j.version>
         <jspecify.version>1.0.0</jspecify.version>
-        <ulid.version>5.2.3</ulid.version>
+        <ulid.version>5.2.4</ulid.version>
 
-        <junit.version>5.11.4</junit.version>
-        <assertj.version>3.26.3</assertj.version>
-        <awaitility.version>4.2.2</awaitility.version>
-        <jqwik.version>1.9.2</jqwik.version>
+        <junit.version>6.1.0</junit.version>
+        <assertj.version>3.27.7</assertj.version>
+        <awaitility.version>4.3.0</awaitility.version>
+        <jqwik.version>1.10.1</jqwik.version>
 
-        <opentelemetry.version>1.44.1</opentelemetry.version>
-        <jetty.version>12.0.16</jetty.version>
-        <spring-boot.version>3.4.1</spring-boot.version>
-        <spring.version>6.2.1</spring.version>
+        <opentelemetry.version>1.63.0</opentelemetry.version>
+        <jetty.version>12.1.10</jetty.version>
+        <spring-boot.version>4.1.0</spring-boot.version>
+        <spring.version>7.0.8</spring.version>
         <jakarta-websocket.version>2.2.0</jakarta-websocket.version>
-        <vertx.version>5.0.0</vertx.version>
+        <vertx.version>5.1.2</vertx.version>
 
         <!-- Plugin versions. -->
-        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
-        <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-        <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
-        <maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
-        <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
-        <maven-deploy-plugin.version>3.1.3</maven-deploy-plugin.version>
-        <maven-install-plugin.version>3.1.3</maven-install-plugin.version>
-        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
-        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
+        <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.5.6</maven-surefire-plugin.version>
+        <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
+        <maven-javadoc-plugin.version>3.12.0</maven-javadoc-plugin.version>
+        <maven-jar-plugin.version>3.5.0</maven-jar-plugin.version>
+        <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+        <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
+        <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
+        <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
 
         <!-- Opt-out switches for examples/recipes (they are not published and
              do not need sources/javadoc jars). Overridden to true in each
@@ -135,10 +135,10 @@
              are exempt; jacoco:check also self-skips when tests were skipped
              (no execution data). -->
         <arcp.skip.coverage.check>true</arcp.skip.coverage.check>
-        <spotless-maven-plugin.version>2.44.5</spotless-maven-plugin.version>
-        <exec-maven-plugin.version>3.5.0</exec-maven-plugin.version>
-        <pitest-maven.version>1.17.4</pitest-maven.version>
-        <pitest-junit5-plugin.version>1.2.1</pitest-junit5-plugin.version>
+        <spotless-maven-plugin.version>3.6.0</spotless-maven-plugin.version>
+        <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
+        <pitest-maven.version>1.25.4</pitest-maven.version>
+        <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -317,67 +317,67 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-common</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-buffer</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-transport</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-handler</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-handler-proxy</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec-http</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec-http2</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec-socks</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec-dns</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-resolver</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-resolver-dns</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-transport-native-unix-common</artifactId>
-                <version>4.2.5.Final</version>
+                <version>4.2.15.Final</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
