@@ -9,12 +9,23 @@ import java.util.HexFormat;
 /** SPI for verifying §6.1 bearer tokens at the handshake seam. */
 @FunctionalInterface
 public interface BearerVerifier {
+  /**
+   * Verifies a bearer token presented in {@code session.hello.payload.auth.token}.
+   *
+   * @param token the presented bearer token, possibly {@code null}
+   * @return the authenticated principal
+   * @throws UnauthenticatedException if the token is missing or invalid
+   */
   Principal verify(String token) throws UnauthenticatedException;
 
   /**
    * Static-token verifier that compares the supplied bearer token to {@code expected} in
    * constant-time using {@link MessageDigest#isEqual(byte[], byte[])}. Suitable for production use
    * with static credentials.
+   *
+   * @param expected the token value to require
+   * @param principal the principal returned on a successful match
+   * @return a verifier accepting exactly {@code expected}
    */
   static BearerVerifier staticToken(String expected, Principal principal) {
     byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
@@ -32,9 +43,11 @@ public interface BearerVerifier {
   }
 
   /**
-   * Accept any non-empty token, returning a principal derived from a SHA-256 digest of the token
+   * Accepts any non-empty token, returning a principal derived from a SHA-256 digest of the token
    * bytes (first 16 bytes hex-encoded). Avoids the principal-collision risk of using {@code
    * String#hashCode}.
+   *
+   * @return a verifier accepting any non-empty token
    */
   static BearerVerifier acceptAny() {
     return token -> {

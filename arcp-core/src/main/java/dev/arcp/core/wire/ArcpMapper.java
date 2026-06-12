@@ -21,6 +21,11 @@ public final class ArcpMapper {
 
   private ArcpMapper() {}
 
+  /**
+   * Creates a new mapper with the ARCP wire configuration applied.
+   *
+   * @return a fresh, caller-owned mapper that is safe to reconfigure
+   */
   public static ObjectMapper create() {
     ObjectMapper m = new ObjectMapper();
     m.registerModule(new JavaTimeModule());
@@ -38,6 +43,8 @@ public final class ArcpMapper {
    *
    * <p>Treat this instance as read-only. Reconfiguring the shared mapper can affect unrelated
    * callers because the same ObjectMapper is reused across the SDK.
+   *
+   * @return the shared SDK-wide mapper
    */
   public static ObjectMapper shared() {
     return SHARED;

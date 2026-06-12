@@ -18,6 +18,9 @@ public final class MemoryTransport implements Transport {
    * runtime} endpoint is intended to be attached to an {@code ArcpRuntime} and the {@code client}
    * endpoint to an {@code ArcpClient}. Either component is functionally interchangeable, but the
    * names exist to remove the index-juggling that array returns required.
+   *
+   * @param runtime the endpoint intended for the runtime side
+   * @param client the endpoint intended for the client side
    */
   public record Pair(MemoryTransport runtime, MemoryTransport client) {}
 

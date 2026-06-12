@@ -21,6 +21,12 @@ public final class Lease {
 
   private final Map<String, List<String>> capabilities;
 
+  /**
+   * Creates a lease from a namespace → pattern-list map. The map and its lists are defensively
+   * copied; iteration order is preserved.
+   *
+   * @param capabilities namespace to pattern-list map
+   */
   public Lease(Map<String, List<String>> capabilities) {
     Objects.requireNonNull(capabilities, "capabilities");
     this.capabilities =
@@ -34,20 +40,41 @@ public final class Lease {
                         LinkedHashMap::new)));
   }
 
+  /**
+   * Returns a lease granting no capabilities.
+   *
+   * @return the empty lease
+   */
   public static Lease empty() {
     return new Lease(Map.of());
   }
 
+  /**
+   * Returns the full capability map, which is also the §9.2 wire form of the lease.
+   *
+   * @return immutable namespace → pattern-list map
+   */
   @JsonValue
   public Map<String, List<String>> capabilities() {
     return capabilities;
   }
 
+  /**
+   * Returns the patterns granted under one namespace.
+   *
+   * @param namespace the capability namespace (e.g. {@code fs.read})
+   * @return the granted patterns, empty when the namespace is not present
+   */
   public List<String> patterns(String namespace) {
     return capabilities.getOrDefault(namespace, List.of());
   }
 
-  /** Parsed cost.budget initial amounts per currency. */
+  /**
+   * Parses the {@code cost.budget} entries (§9.6) into initial amounts per currency.
+   *
+   * @return currency → amount map, empty when no budget capability is present
+   * @throws IllegalArgumentException if an entry is not of the form {@code CURRENCY:amount}
+   */
   public Map<String, BigDecimal> budget() {
     return patterns("cost.budget").stream()
         .map(
@@ -74,6 +101,9 @@ public final class Lease {
    * a child pattern is covered when some parent pattern covers it; for {@code cost.budget} the
    * comparison is numeric — every child currency must be present in the parent and its amount must
    * not exceed the parent's amount (a child cannot grant more spend than the parent holds).
+   *
+   * @param child the candidate subset lease
+   * @return {@code true} if every child capability is covered by this lease
    */
   public boolean contains(Lease child) {
     return child.capabilities.entrySet().stream()
@@ -125,9 +155,20 @@ public final class Lease {
     return false;
   }
 
+  /** Mutable accumulator building a {@link Lease} namespace by namespace. */
   public static final class Builder {
     private final Map<String, List<String>> caps = new LinkedHashMap<>();
 
+    /** Creates a builder granting no capabilities. */
+    public Builder() {}
+
+    /**
+     * Grants patterns under a namespace, appending to any patterns already granted for it.
+     *
+     * @param namespace the capability namespace (e.g. {@code net.fetch})
+     * @param patterns the §9.2 patterns to grant
+     * @return this builder
+     */
     public Builder allow(String namespace, String... patterns) {
       List<String> existing = caps.getOrDefault(namespace, new ArrayList<>());
       List<String> merged = new ArrayList<>(existing);
@@ -136,11 +177,21 @@ public final class Lease {
       return this;
     }
 
+    /**
+     * Builds the immutable lease.
+     *
+     * @return the lease
+     */
     public Lease build() {
       return new Lease(caps);
     }
   }
 
+  /**
+   * Creates a new {@link Builder}.
+   *
+   * @return an empty builder
+   */
   public static Builder builder() {
     return new Builder();
   }

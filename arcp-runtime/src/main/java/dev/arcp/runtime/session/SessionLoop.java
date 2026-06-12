@@ -83,10 +83,15 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
 
   private static final Logger log = LoggerFactory.getLogger(SessionLoop.class);
 
+  /** Lifecycle of one session loop. */
   public enum Phase {
+    /** Transport attached; no {@code session.hello} processed yet (§6.2). */
     AWAITING_HELLO,
+    /** Handshake complete; dispatching messages. */
     ACTIVE,
+    /** Transport dropped unexpectedly; held for the resume window (§6.3). */
     PARKED,
+    /** Torn down; the loop never leaves this phase. */
     CLOSED
   }
 
@@ -131,6 +136,13 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   @SuppressWarnings("unused")
   private Flow.@Nullable Subscription subscription;
 
+  /**
+   * Creates a loop serving one transport with the runtime's shared services; call {@link #start} to
+   * begin consuming inbound envelopes.
+   *
+   * @param runtime the owning runtime supplying mapper, agents, clock, and executors
+   * @param transport the connected transport this session speaks over
+   */
   public SessionLoop(ArcpRuntime runtime, Transport transport) {
     this.runtime = runtime;
     this.transport = transport;
@@ -146,16 +158,26 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
             this::emitJobEvent);
   }
 
+  /**
+   * Returns the best identity currently available for logging and map keys.
+   *
+   * @return the session id once the §6.2 handshake assigned one, otherwise the pending id
+   */
   public String idOrPending() {
     SessionId s = sessionId;
     return s == null ? pendingId : s.value();
   }
 
-  /** Stable key used at session insertion time; never flips even after handshake. */
+  /**
+   * Returns the stable key used at session insertion time; never flips even after handshake.
+   *
+   * @return the pending id minted at construction
+   */
   public String pendingKey() {
     return pendingId;
   }
 
+  /** Subscribes this loop to the transport's inbound envelopes, beginning dispatch. */
   public void start() {
     transport.incoming().subscribe(this);
   }
@@ -238,6 +260,13 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     }
   }
 
+  /**
+   * Tears the session down immediately: cancels heartbeats and in-flight jobs, revokes their
+   * credentials, and closes the transport. Idempotent; unlike a §6.3 park, the session cannot be
+   * resumed afterwards.
+   *
+   * @param reason a short human-readable cause recorded in logs
+   */
   public void shutdown(String reason) {
     Phase prev = phase.getAndSet(Phase.CLOSED);
     if (prev == Phase.CLOSED) {
@@ -1269,18 +1298,39 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     return env;
   }
 
+  /**
+   * Returns the effective feature set: the intersection of {@code session.hello} and {@code
+   * session.welcome} features (§6.2).
+   *
+   * @return an unmodifiable view of the negotiated features; empty before the handshake
+   */
   public Set<Feature> negotiated() {
     return java.util.Collections.unmodifiableSet(negotiated);
   }
 
+  /**
+   * Returns the session's identity.
+   *
+   * @return the session id, or {@code null} before the §6.2 handshake completes
+   */
   public @Nullable SessionId sessionId() {
     return sessionId;
   }
 
+  /**
+   * Returns the principal authenticated by the §6.1 bearer token.
+   *
+   * @return the principal, or {@code null} before the handshake completes
+   */
   public @Nullable Principal principal() {
     return principal;
   }
 
+  /**
+   * Returns the loop's current lifecycle phase.
+   *
+   * @return the current {@link Phase}
+   */
   public Phase phase() {
     return phase.get();
   }

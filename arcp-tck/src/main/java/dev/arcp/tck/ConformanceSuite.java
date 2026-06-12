@@ -49,9 +49,25 @@ public final class ConformanceSuite {
   /** Provider factory shape: each test invocation builds a fresh provider. */
   @FunctionalInterface
   public interface ProviderFactory {
+    /**
+     * Builds a fresh provider for a single conformance assertion.
+     *
+     * @return a provider owning the runtime under test; the suite closes it after the assertion
+     * @throws Exception if the provider cannot be constructed
+     */
     TckProvider create() throws Exception;
   }
 
+  /**
+   * Returns the conformance assertions as JUnit 5 dynamic tests, one per protocol behaviour:
+   * envelope round-trip via {@code session.welcome} (§5), capability intersection (§6.2), job
+   * submission and idempotency (§7.1, §7.2), agent versioning (§7.5), job events (§8.2), and
+   * provisioned credentials (§9.8). Each test builds a fresh provider from {@code factory} and
+   * closes both the provider and its client afterwards.
+   *
+   * @param factory supplies a fresh {@link TckProvider} per test invocation
+   * @return the dynamic test list to return from a JUnit 5 {@code @TestFactory} method
+   */
   public static List<DynamicTest> dynamicTests(ProviderFactory factory) {
     return List.of(
         DynamicTest.dynamicTest(

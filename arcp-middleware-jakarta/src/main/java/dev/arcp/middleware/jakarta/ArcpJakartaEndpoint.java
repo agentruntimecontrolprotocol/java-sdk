@@ -11,7 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Jakarta WebSocket endpoint that adapts every accepted session into an ARCP {@link Transport}.
+ * Jakarta WebSocket endpoint that adapts every accepted session into an ARCP {@link
+ * dev.arcp.core.transport.Transport}.
  *
  * <p>The {@link ArcpRuntime} instance is sourced from the endpoint configuration's {@link
  * EndpointConfig#getUserProperties() user properties} under {@link #RUNTIME_KEY}. The companion
@@ -21,11 +22,19 @@ public final class ArcpJakartaEndpoint extends Endpoint {
 
   private static final Logger log = LoggerFactory.getLogger(ArcpJakartaEndpoint.class);
 
+  /**
+   * {@link EndpointConfig#getUserProperties()} key under which the {@link ArcpRuntime} rides;
+   * {@link ArcpJakartaAdapter#serverEndpointConfig()} populates it automatically.
+   */
   public static final String RUNTIME_KEY = ArcpRuntime.class.getName();
 
   private final Map<String, JakartaWebSocketTransport> transports = new ConcurrentHashMap<>();
   private final boolean hostRejected;
 
+  /**
+   * Creates an endpoint that treats the handshake's {@code Host} as allowed; containers
+   * instantiating the endpoint outside {@link ArcpJakartaAdapter}'s configurator use this form.
+   */
   public ArcpJakartaEndpoint() {
     this(false);
   }

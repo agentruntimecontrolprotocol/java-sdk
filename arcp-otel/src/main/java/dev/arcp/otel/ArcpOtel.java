@@ -30,24 +30,62 @@ import org.jspecify.annotations.Nullable;
  */
 public final class ArcpOtel {
 
+  /**
+   * Key under {@code payload.extensions} where W3C Trace Context headers are carried so traces
+   * survive the ARCP hop (§11).
+   */
   public static final String EXTENSION_NAME = "x-vendor.opentelemetry.tracecontext";
 
+  /** Span attribute for envelope direction: {@code out} for sends, {@code in} for receives. */
   public static final AttributeKey<String> ATTR_DIRECTION =
       AttributeKey.stringKey("arcp.direction");
+
+  /** Span attribute carrying the envelope's wire {@code type}, e.g. {@code job.submit}. */
   public static final AttributeKey<String> ATTR_TYPE = AttributeKey.stringKey("arcp.type");
+
+  /** Span attribute carrying the envelope's message {@code id}. */
   public static final AttributeKey<String> ATTR_ID = AttributeKey.stringKey("arcp.id");
+
+  /** Span attribute carrying the envelope's {@code session_id}, when present. */
   public static final AttributeKey<String> ATTR_SESSION_ID =
       AttributeKey.stringKey("arcp.session_id");
+
+  /** Span attribute carrying the envelope's {@code job_id}, when present. */
   public static final AttributeKey<String> ATTR_JOB_ID = AttributeKey.stringKey("arcp.job_id");
+
+  /** Span attribute carrying the envelope's {@code trace_id} (§11), when present. */
   public static final AttributeKey<String> ATTR_TRACE_ID = AttributeKey.stringKey("arcp.trace_id");
+
+  /** Span attribute carrying the envelope's {@code event_seq}, when present. */
   public static final AttributeKey<Long> ATTR_EVENT_SEQ = AttributeKey.longKey("arcp.event_seq");
 
   private ArcpOtel() {}
 
+  /**
+   * Wraps {@code inner} so every sent and received {@link Envelope} is surrounded by a span. No
+   * trace context is injected into or extracted from envelopes; see {@link #withTracing(Transport,
+   * Tracer, TextMapPropagator)} for cross-process propagation.
+   *
+   * @param inner transport to decorate
+   * @param tracer tracer used to start the per-envelope spans
+   * @return a transport that delegates to {@code inner} and records spans
+   */
   public static Transport withTracing(Transport inner, Tracer tracer) {
     return withTracing(inner, tracer, null);
   }
 
+  /**
+   * Wraps {@code inner} so every sent and received {@link Envelope} is surrounded by a span. When a
+   * propagator is supplied, outbound envelopes carry W3C Trace Context under {@link
+   * #EXTENSION_NAME} in {@code payload.extensions}, and inbound envelopes have it extracted as the
+   * receive span's parent (§11).
+   *
+   * @param inner transport to decorate
+   * @param tracer tracer used to start the per-envelope spans
+   * @param propagator trace-context propagator, or {@code null} to skip envelope injection and
+   *     extraction
+   * @return a transport that delegates to {@code inner} and records spans
+   */
   public static Transport withTracing(
       Transport inner, Tracer tracer, @Nullable TextMapPropagator propagator) {
     return new TracingTransport(inner, tracer, propagator);
@@ -245,7 +283,13 @@ public final class ArcpOtel {
     }
   }
 
-  /** Build an opaque {@link SpanContext} for tests. */
+  /**
+   * Build an opaque {@link SpanContext} for tests, sampled and with default trace state.
+   *
+   * @param traceId 32-hex-character W3C trace id
+   * @param spanId 16-hex-character W3C span id
+   * @return a valid, sampled span context carrying the given ids
+   */
   public static SpanContext newSpanContext(String traceId, String spanId) {
     return SpanContext.create(traceId, spanId, TraceFlags.getSampled(), TraceState.getDefault());
   }

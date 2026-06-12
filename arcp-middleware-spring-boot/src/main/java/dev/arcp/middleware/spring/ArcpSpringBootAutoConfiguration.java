@@ -25,11 +25,22 @@ public class ArcpSpringBootAutoConfiguration implements WebSocketConfigurer {
   private final ArcpRuntime runtime;
   private final ArcpSpringBootProperties properties;
 
+  /**
+   * Creates the auto-configuration; invoked by Spring with the discovered beans.
+   *
+   * @param runtime the {@link ArcpRuntime} bean that accepted sessions are handed to
+   * @param properties the {@code arcp.middleware.*} configuration properties
+   */
   public ArcpSpringBootAutoConfiguration(ArcpRuntime runtime, ArcpSpringBootProperties properties) {
     this.runtime = runtime;
     this.properties = properties;
   }
 
+  /**
+   * Exposes the handler that serves ARCP JSON envelopes as WebSocket text frames per §4.
+   *
+   * @return the handler registered at the {@code arcp.middleware.path} endpoint
+   */
   @Bean
   public ArcpWebSocketHandler arcpWebSocketHandler() {
     return new ArcpWebSocketHandler(runtime);

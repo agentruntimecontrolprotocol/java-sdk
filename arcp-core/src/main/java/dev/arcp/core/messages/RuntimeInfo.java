@@ -4,7 +4,14 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Objects;
 
+/**
+ * Runtime identification carried in {@code session.welcome.payload.runtime} (§6.2).
+ *
+ * @param name runtime implementation name
+ * @param version runtime implementation version
+ */
 public record RuntimeInfo(String name, String version) {
+  /** Canonical constructor requiring both fields. */
   @JsonCreator
   public RuntimeInfo(@JsonProperty("name") String name, @JsonProperty("version") String version) {
     this.name = Objects.requireNonNull(name, "name");

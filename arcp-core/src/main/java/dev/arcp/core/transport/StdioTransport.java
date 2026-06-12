@@ -54,10 +54,23 @@ public final class StdioTransport implements Transport {
   private final Thread readerThread;
   private volatile boolean closed;
 
+  /**
+   * Creates a transport over the given stream pair using the shared {@link ArcpMapper}.
+   *
+   * @param in stream to read inbound envelopes from
+   * @param out stream to write outbound envelopes to
+   */
   public StdioTransport(InputStream in, OutputStream out) {
     this(in, out, ArcpMapper.shared());
   }
 
+  /**
+   * Creates a transport over the given stream pair.
+   *
+   * @param in stream to read inbound envelopes from
+   * @param out stream to write outbound envelopes to
+   * @param mapper mapper for envelope JSON, or {@code null} to use the shared {@link ArcpMapper}
+   */
   public StdioTransport(InputStream in, OutputStream out, ObjectMapper mapper) {
     this.mapper = mapper != null ? mapper : ArcpMapper.shared();
     this.writer =
@@ -71,7 +84,11 @@ public final class StdioTransport implements Transport {
     this.readerThread = Thread.ofVirtual().name("arcp-stdio-reader").unstarted(this::readLoop);
   }
 
-  /** Begin reading lines from the input stream. */
+  /**
+   * Begins reading lines from the input stream on the virtual reader thread.
+   *
+   * @return this transport
+   */
   public StdioTransport start() {
     readerThread.start();
     return this;

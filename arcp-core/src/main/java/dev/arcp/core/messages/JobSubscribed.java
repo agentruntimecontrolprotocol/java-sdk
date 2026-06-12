@@ -8,6 +8,20 @@ import dev.arcp.core.ids.TraceId;
 import dev.arcp.core.lease.Lease;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * §7.6 {@code job.subscribed} payload: acknowledges a {@code job.subscribe} with a snapshot of the
+ * job's current state.
+ *
+ * @param jobId the subscribed job ({@code job_id})
+ * @param currentStatus job status at subscription time ({@code current_status})
+ * @param agent resolved agent as {@code name@version}
+ * @param lease the job's effective lease, or {@code null}
+ * @param parentJobId parent job for §10 delegated jobs ({@code parent_job_id}), or {@code null}
+ * @param traceId §11 trace context ({@code trace_id}), or {@code null}
+ * @param subscribedFrom event sequence from which the subscriber receives events ({@code
+ *     subscribed_from})
+ * @param replayed whether buffered history was replayed
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record JobSubscribed(
     @JsonProperty("job_id") JobId jobId,
@@ -20,6 +34,7 @@ public record JobSubscribed(
     boolean replayed)
     implements Message {
 
+  /** Canonical constructor. */
   @JsonCreator
   public JobSubscribed(
       @JsonProperty("job_id") JobId jobId,

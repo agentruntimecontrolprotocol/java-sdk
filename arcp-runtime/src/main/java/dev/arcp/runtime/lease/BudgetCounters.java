@@ -18,21 +18,45 @@ public final class BudgetCounters {
   private final ConcurrentHashMap<String, AtomicReference<BigDecimal>> counters =
       new ConcurrentHashMap<>();
 
+  /**
+   * Creates counters initialized at the budgeted value per currency, as granted at job acceptance
+   * (§9.6).
+   *
+   * @param initial the budgeted amount per currency, e.g. {@code USD → 5.00}
+   */
   public BudgetCounters(Map<String, BigDecimal> initial) {
     for (var e : initial.entrySet()) {
       counters.put(e.getKey(), new AtomicReference<>(e.getValue()));
     }
   }
 
+  /**
+   * Tests whether a currency is budgeted; cost metrics in unbudgeted currencies are ignored (§9.6).
+   *
+   * @param currency the currency code from a {@code cost.*} metric's {@code unit}
+   * @return {@code true} if a counter exists for {@code currency}
+   */
   public boolean tracks(String currency) {
     return counters.containsKey(currency);
   }
 
+  /**
+   * Returns the remaining budget for a currency.
+   *
+   * @param currency the currency code
+   * @return the remaining amount, or {@link BigDecimal#ZERO} for an untracked currency
+   */
   public BigDecimal remaining(String currency) {
     var ref = counters.get(currency);
     return ref == null ? BigDecimal.ZERO : ref.get();
   }
 
+  /**
+   * Returns a point-in-time view of every counter, e.g. for the budget echoed in {@code
+   * job.accepted} (§9.6).
+   *
+   * @return an unmodifiable map of remaining amount per currency
+   */
   public Map<String, BigDecimal> snapshot() {
     return Collections.unmodifiableMap(
         counters.entrySet().stream()
@@ -41,7 +65,13 @@ public final class BudgetCounters {
                     Map.Entry::getKey, e -> e.getValue().get(), (a, b) -> a, LinkedHashMap::new)));
   }
 
-  /** §9.6: negative metric values produce no decrement. */
+  /**
+   * Subtracts a reported cost from the currency's counter. Per §9.6, negative metric values produce
+   * no decrement; untracked currencies are ignored.
+   *
+   * @param currency the currency code from the {@code cost.*} metric's {@code unit}
+   * @param amount the reported cost to subtract
+   */
   public void decrement(String currency, BigDecimal amount) {
     if (amount.signum() < 0) {
       return;

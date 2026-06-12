@@ -8,7 +8,13 @@ public final class Events {
 
   private Events() {}
 
-  /** Serialize an event body into a flat JSON object with the {@code kind} field set. */
+  /**
+   * Serializes an event body into a flat JSON object.
+   *
+   * @param mapper the mapper to use
+   * @param body the event body to serialize
+   * @return the body as a JSON object, ready to compose into a {@code job.event} payload
+   */
   public static com.fasterxml.jackson.databind.node.ObjectNode encode(
       ObjectMapper mapper, EventBody body) {
     com.fasterxml.jackson.databind.node.ObjectNode bodyNode =
@@ -17,7 +23,15 @@ public final class Events {
     return bodyNode;
   }
 
-  /** Decode a body from {@code kind} discriminator and the body JSON. */
+  /**
+   * Decodes a typed body from the wire {@code kind} discriminator and the body JSON.
+   *
+   * @param mapper the mapper to use
+   * @param kindWire the wire {@code kind} string (§8.2)
+   * @param body the kind-specific body JSON
+   * @return the typed event body
+   * @throws IllegalArgumentException if the kind is unknown
+   */
   public static EventBody decode(ObjectMapper mapper, String kindWire, JsonNode body) {
     return switch (EventBody.Kind.fromWire(kindWire)) {
       case LOG -> mapper.convertValue(body, LogEvent.class);

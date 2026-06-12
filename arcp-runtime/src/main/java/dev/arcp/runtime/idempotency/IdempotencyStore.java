@@ -26,6 +26,12 @@ import org.jspecify.annotations.Nullable;
  */
 public final class IdempotencyStore implements AutoCloseable {
 
+  /**
+   * Result of a {@link #claim} that found a prior entry for the same {@code (principal,
+   * idempotency_key)} pair (§7.2).
+   *
+   * @param existing the job id the key already maps to
+   */
   public record Conflict(JobId existing) {}
 
   private record Key(String principal, String idempotencyKey) {}
@@ -37,10 +43,25 @@ public final class IdempotencyStore implements AutoCloseable {
   private final Clock clock;
   private final @Nullable ScheduledFuture<?> pruneTask;
 
+  /**
+   * Creates a store without background eviction; callers must invoke {@link #prune()} themselves.
+   *
+   * @param clock the clock used to age entries
+   * @param ttl how long a claimed key is retained
+   */
   public IdempotencyStore(Clock clock, Duration ttl) {
     this(clock, ttl, null, Duration.ofMinutes(1));
   }
 
+  /**
+   * Creates a store that, when a scheduler is supplied, evicts expired entries on a fixed delay.
+   *
+   * @param clock the clock used to age entries
+   * @param ttl how long a claimed key is retained
+   * @param scheduler the scheduler running the background prune task, or {@code null} to disable
+   *     background eviction
+   * @param pruneInterval the delay between background prune runs (clamped to at least 1 ms)
+   */
   public IdempotencyStore(
       Clock clock,
       Duration ttl,
@@ -66,6 +87,12 @@ public final class IdempotencyStore implements AutoCloseable {
    *   <li>{@code Conflict(existing)}: the same key already produced a job (identical fingerprint →
    *       reuse; different fingerprint → caller raises {@code DUPLICATE_KEY}).
    * </ul>
+   *
+   * @param principal the authenticated submitter; keys are scoped per principal (§7.2)
+   * @param idempotencyKey the {@code idempotency_key} from {@code job.submit}
+   * @param fingerprint the canonical payload fingerprint ({@link IdempotencyFingerprint})
+   * @param freshId the job id to claim if the key is unused
+   * @return {@code null} if {@code freshId} was claimed, otherwise the conflicting entry
    */
   public @Nullable Conflict claim(
       Principal principal, String idempotencyKey, String fingerprint, JobId freshId) {
@@ -85,6 +112,16 @@ public final class IdempotencyStore implements AutoCloseable {
     return new Conflict(existing.jobId);
   }
 
+  /**
+   * Tests whether the stored entry for this key carries an identical payload fingerprint —
+   * distinguishing a §7.2 replay (same parameters, reuse the job) from a {@code DUPLICATE_KEY}
+   * conflict.
+   *
+   * @param principal the authenticated submitter
+   * @param idempotencyKey the {@code idempotency_key} from {@code job.submit}
+   * @param fingerprint the canonical payload fingerprint of the new submission
+   * @return {@code true} if an entry exists and its fingerprint matches
+   */
   public boolean matchesPayload(Principal principal, String idempotencyKey, String fingerprint) {
     Entry e = entries.get(new Key(principal.id(), idempotencyKey));
     return e != null && e.fingerprint.equals(fingerprint);
@@ -95,6 +132,9 @@ public final class IdempotencyStore implements AutoCloseable {
    * claim when the corresponding accept fails (§7.2): without this the key stays poisoned for the
    * full TTL and an identical retry is wrongly rejected with {@code DUPLICATE_KEY} (#90).
    *
+   * @param principal the authenticated submitter the key is scoped to
+   * @param idempotencyKey the {@code idempotency_key} to release
+   * @param expected the job id the entry must still map to for the release to apply
    * @return {@code true} if an entry for {@code expected} was removed
    */
   public boolean release(Principal principal, String idempotencyKey, JobId expected) {
