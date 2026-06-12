@@ -30,7 +30,6 @@ import dev.arcp.core.messages.JobResult;
 import dev.arcp.core.messages.JobSubmit;
 import dev.arcp.core.messages.JobSubscribe;
 import dev.arcp.core.messages.JobSubscribed;
-import dev.arcp.core.messages.JobSummary;
 import dev.arcp.core.messages.JobUnsubscribe;
 import dev.arcp.core.messages.Message;
 import dev.arcp.core.messages.Messages;
@@ -55,6 +54,7 @@ import dev.arcp.runtime.agent.JobOutcome;
 import dev.arcp.runtime.credentials.CredentialBinding;
 import dev.arcp.runtime.credentials.IssuedCredential;
 import dev.arcp.runtime.heartbeat.HeartbeatTracker;
+import dev.arcp.runtime.idempotency.IdempotencyFingerprint;
 import dev.arcp.runtime.lease.BudgetCounters;
 import dev.arcp.runtime.lease.LeaseGuard;
 import java.math.BigDecimal;
@@ -522,73 +522,18 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     if (!negotiated.contains(Feature.LIST_JOBS)) {
       return;
     }
-    MessageId requestId = envelope.id();
-
-    // Decode the cursor first so a bad cursor fails fast without scanning the registry. The error
-    // echoes the request envelope id so the client correlates it to this list call, not an
-    // unrelated in-flight submit (#102).
-    int startIndex = 0;
-    if (req.cursor() != null && !req.cursor().isBlank()) {
-      try {
-        byte[] decoded = java.util.Base64.getUrlDecoder().decode(req.cursor());
-        startIndex = Integer.parseInt(new String(decoded, java.nio.charset.StandardCharsets.UTF_8));
-        if (startIndex < 0) {
-          startIndex = 0;
-        }
-      } catch (IllegalArgumentException e) {
-        sendJobErrorTopLevel(envelope, ErrorCode.INVALID_REQUEST, "invalid list_jobs cursor");
-        return;
-      }
-    }
-
     JobFilter filter = req.filter() != null ? req.filter() : JobFilter.all();
-    // Filter and sort matching records, but only materialize JobSummary for the requested page so a
-    // small limit does not map every matching job (#83). Ordering and cursor use the same stable key
-    // (createdAt, then jobId).
-    List<JobRecord> matching =
-        runtime.jobs().stream()
-            .filter(rec -> rec.principal().equals(principal))
-            .filter(rec -> filter.status() == null || filter.status().contains(rec.status().wire()))
-            .filter(
-                rec ->
-                    filter.agent() == null
-                        || filter.agent().equals(rec.resolvedAgent())
-                        || filter.agent().equals(rec.resolvedAgent().split("@", 2)[0]))
-            .filter(
-                rec ->
-                    filter.createdAfter() == null || rec.createdAt().isAfter(filter.createdAfter()))
-            .sorted(
-                java.util.Comparator.comparing((JobRecord rec) -> rec.createdAt())
-                    .thenComparing(rec -> rec.jobId().value()))
-            .toList();
-
-    int limit = req.limit() != null && req.limit() > 0 ? req.limit() : matching.size();
-    int endIndex = Math.min(matching.size(), startIndex + limit);
-    List<JobSummary> page =
-        startIndex >= matching.size()
-            ? List.of()
-            : matching.subList(startIndex, endIndex).stream().map(SessionLoop::toSummary).toList();
-    String nextCursor =
-        endIndex < matching.size()
-            ? java.util.Base64.getUrlEncoder()
-                .withoutPadding()
-                .encodeToString(
-                    Integer.toString(endIndex).getBytes(java.nio.charset.StandardCharsets.UTF_8))
-            : null;
-    SessionJobs response = new SessionJobs(requestId, page, nextCursor);
+    JobListing.Page page;
+    try {
+      page = JobListing.page(runtime.jobs(), principal, filter, req.limit(), req.cursor());
+    } catch (IllegalArgumentException e) {
+      // The error echoes the request envelope id so the client correlates it to this list call,
+      // not an unrelated in-flight submit (#102).
+      sendJobErrorTopLevel(envelope, ErrorCode.INVALID_REQUEST, "invalid list_jobs cursor");
+      return;
+    }
+    SessionJobs response = new SessionJobs(envelope.id(), page.jobs(), page.nextCursor());
     send(Message.Type.SESSION_JOBS, response, sessionId, null, null, null);
-  }
-
-  private static JobSummary toSummary(JobRecord rec) {
-    return new JobSummary(
-        rec.jobId(),
-        rec.resolvedAgent(),
-        rec.status().wire(),
-        rec.lease(),
-        null,
-        rec.createdAt(),
-        rec.traceId(),
-        rec.lastEventSeq());
   }
 
   private void handleSubmit(Envelope envelope, JobSubmit submit) {
@@ -611,7 +556,7 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
     // §7.2: idempotency. Identical (principal, key, full-submit fingerprint) returns prior job_id.
     String idempotencyKey = submit.idempotencyKey();
     if (idempotencyKey != null) {
-      String fingerprint = idempotencyFingerprint(submit);
+      String fingerprint = IdempotencyFingerprint.of(mapper, submit);
       JobId fresh = JobId.generate();
       var conflict = runtime.idempotency().claim(pr, idempotencyKey, fingerprint, fresh);
       if (conflict != null) {
@@ -650,46 +595,6 @@ public final class SessionLoop implements Flow.Subscriber<Envelope> {
   private void releaseIdempotency(Principal pr, @Nullable String idempotencyKey, JobId jobId) {
     if (idempotencyKey != null) {
       runtime.idempotency().release(pr, idempotencyKey, jobId);
-    }
-  }
-
-  /**
-   * Build a collision-resistant fingerprint over the semantically meaningful {@link JobSubmit}
-   * fields: agent, input, lease_request, lease_constraints, max_runtime_sec. The serialization is
-   * canonical (alphabetically sorted keys) so that semantically equal payloads always produce the
-   * same fingerprint and the comparison in {@link
-   * dev.arcp.runtime.idempotency.IdempotencyStore#matchesPayload} is robust to key-order changes.
-   */
-  private String idempotencyFingerprint(JobSubmit submit) {
-    try {
-      ObjectMapper canonical = mapper.copy();
-      canonical.configure(
-          com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
-      // ORDER_MAP_ENTRIES_BY_KEYS sorts java.util.Map only; submit.input() is a JsonNode/ObjectNode
-      // whose properties must also be sorted so semantically equal payloads with differing key order
-      // hash identically (§7.2, #91).
-      canonical.configure(
-          com.fasterxml.jackson.databind.cfg.JsonNodeFeature.WRITE_PROPERTIES_SORTED, true);
-      canonical.setNodeFactory(
-          com.fasterxml.jackson.databind.node.JsonNodeFactory.withExactBigDecimals(true));
-      ObjectNode canon = canonical.createObjectNode();
-      canon.put("agent", submit.agent().wire());
-      canon.set("input", canonical.valueToTree(submit.input()));
-      if (submit.leaseRequest() != null) {
-        canon.set("lease_request", canonical.valueToTree(submit.leaseRequest()));
-      }
-      if (submit.leaseConstraints() != null) {
-        canon.set("lease_constraints", canonical.valueToTree(submit.leaseConstraints()));
-      }
-      if (submit.maxRuntimeSec() != null) {
-        canon.put("max_runtime_sec", submit.maxRuntimeSec());
-      }
-      byte[] bytes = canonical.writerWithDefaultPrettyPrinter().writeValueAsBytes(canon);
-      java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-      return java.util.HexFormat.of().formatHex(md.digest(bytes));
-    } catch (com.fasterxml.jackson.core.JsonProcessingException
-        | java.security.NoSuchAlgorithmException e) {
-      throw new IllegalStateException("idempotency fingerprint failure", e);
     }
   }
 
