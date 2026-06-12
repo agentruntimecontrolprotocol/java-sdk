@@ -65,9 +65,14 @@ public final class JobListing {
     if (cursor == null || cursor.isBlank()) {
       return 0;
     }
-    byte[] decoded = Base64.getUrlDecoder().decode(cursor);
-    int startIndex = Integer.parseInt(new String(decoded, StandardCharsets.UTF_8));
-    return Math.max(0, startIndex);
+    try {
+      byte[] decoded = Base64.getUrlDecoder().decode(cursor);
+      return Math.max(0, Integer.parseInt(new String(decoded, StandardCharsets.UTF_8)));
+    } catch (IllegalArgumentException e) {
+      // Covers malformed Base64 and non-numeric content (NumberFormatException): surface a stable
+      // message instead of the parser's, since the caller echoes it in INVALID_REQUEST.
+      throw new IllegalArgumentException("invalid cursor", e);
+    }
   }
 
   private static String encodeCursor(int index) {
