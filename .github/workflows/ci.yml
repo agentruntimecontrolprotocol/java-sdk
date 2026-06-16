@@ -29,7 +29,7 @@ permissions:
 jobs:
   build:
     name: build (JDK ${{ matrix.jdk }})
-    runs-on: [self-hosted, linux, arm64, arcp]
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -134,7 +134,7 @@ jobs:
 
   javadoc:
     name: javadoc
-    runs-on: [self-hosted, linux, arm64, arcp]
+    runs-on: ubuntu-24.04-arm
     needs: build
     permissions:
       contents: read
