@@ -113,7 +113,7 @@
         <maven-deploy-plugin.version>3.1.4</maven-deploy-plugin.version>
         <maven-install-plugin.version>3.1.4</maven-install-plugin.version>
         <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
-        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
 
         <!-- Opt-out switches for examples/recipes (they are not published and
              do not need sources/javadoc jars). Overridden to true in each
@@ -135,9 +135,9 @@
              are exempt; jacoco:check also self-skips when tests were skipped
              (no execution data). -->
         <arcp.skip.coverage.check>true</arcp.skip.coverage.check>
-        <spotless-maven-plugin.version>3.6.0</spotless-maven-plugin.version>
+        <spotless-maven-plugin.version>3.7.0</spotless-maven-plugin.version>
         <exec-maven-plugin.version>3.6.3</exec-maven-plugin.version>
-        <pitest-maven.version>1.25.4</pitest-maven.version>
+        <pitest-maven.version>1.25.5</pitest-maven.version>
         <pitest-junit5-plugin.version>1.2.3</pitest-junit5-plugin.version>
     </properties>
 
